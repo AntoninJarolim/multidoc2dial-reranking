@@ -1,11 +1,9 @@
 import json
-import os
 
-from transformers import AutoModel, AutoTokenizer, DPRContextEncoderTokenizer, DPRContextEncoder
-import pandas as pd
 import numpy as np
+import pandas as pd
 import torch
-import jsonlines
+from transformers import AutoModel, AutoTokenizer, DPRContextEncoder
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -82,22 +80,14 @@ def get_top_passages(questions, k):
     return passage_ids, scores, texts
 
 
-if __name__ == "__main__":
-    df_passages = pd.read_json("data/mdd_dpr/dpr.psg.multidoc2dial_all.structure.json")
-    df_queries = pd.read_json("data/mdd_dpr/dpr.multidoc2dial_all.structure.train.json")
+def create_dpr_data(split):
+    df_queries = pd.read_json(f"../multidoc2dial/data/mdd_dpr/dpr.multidoc2dial_all.structure.{split}.json")
 
     df_queries["positive_ctx_len"] = df_queries["positive_ctxs"].apply(len)
     df_queries["positive_passage_id"] = df_queries["positive_ctxs"].apply(lambda x: x[0]["psg_id"])
     df_queries["positive_passage_text"] = df_queries["positive_ctxs"].apply(lambda x: x[0]["text"])
 
-    doc_embeddings = torch.load("doc_embeddings.pt")
-    doc_embeddings.to(device)
-
-    qtokenizer = AutoTokenizer.from_pretrained("sivasankalpp/dpr-multidoc2dial-structure-question-encoder")
-    qmodel = AutoModel.from_pretrained("sivasankalpp/dpr-multidoc2dial-structure-question-encoder")
-    qmodel.to(device)
-
-    batch_size = 256
+    batch_size = 128
 
     num_batches = len(df_queries["question"]) // batch_size
     zip_questions = []
@@ -118,6 +108,7 @@ if __name__ == "__main__":
         for question, positive_passage, passage_id, result in future_json:
 
             DPR_results = []
+            found_at_rank = None
             # result has shape (3, 10) -> zip transforms it to (10, 3)
             # for each of 10 results get passage id, score and text
             for rank, (res_passage_id, score, text) in enumerate(zip(*result)):
@@ -136,11 +127,27 @@ if __name__ == "__main__":
 
             zip_questions.append(
                 {
-                    "q": question,
-                    "pos": positive_passage,
-                    "neg": [x["text"] for x in DPR_results[10:]]
+                    "question": question,
+                    "positive_passage": positive_passage,
+                    "positive_passage_id": passage_id,
+                    "found_at_rank": found_at_rank,
+                    "DPR_result": DPR_results
                 }
             )
 
-    with jsonlines.open('preprocessed_data.jsonl', mode="w") as writer:
-        writer.write_all(zip_questions)
+    with open(f'data/DPR/DPR_{split}.json', mode="w") as f:
+        json.dump(zip_questions, f, indent=4)
+
+
+if __name__ == "__main__":
+    doc_embeddings = torch.load("doc_embeddings.pt")
+    doc_embeddings.to(device)
+
+    qtokenizer = AutoTokenizer.from_pretrained("sivasankalpp/dpr-multidoc2dial-structure-question-encoder")
+    qmodel = AutoModel.from_pretrained("sivasankalpp/dpr-multidoc2dial-structure-question-encoder")
+    qmodel.to(device)
+
+    df_passages = pd.read_json("../multidoc2dial/data/mdd_dpr/dpr.psg.multidoc2dial_all.structure.json")
+
+    for split in ["train", "validation", "test"]:
+        create_dpr_data(split)
