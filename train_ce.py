@@ -44,11 +44,10 @@ class CrossEncoder(torch.nn.Module):
     def __init__(self, bert_model, dropout_rate=0.1):
         super(CrossEncoder, self).__init__()
 
-        self.bert_model = bert_model
-        self.linear = torch.nn.Linear(768, 1)
+        self.bert_model = AutoModelForMaskedLM.from_pretrained(roberta_model)
+        self.linear = nn.Linear(768, 1)
         self.dropout = nn.Dropout(dropout_rate)
 
-        # Initialize the linear layer
         init.xavier_uniform_(self.linear.weight)
         if self.linear.bias is not None:
             init.zeros_(self.linear.bias)
@@ -73,8 +72,7 @@ class CrossEncoder(torch.nn.Module):
 
 roberta_model = "FacebookAI/xlm-roberta-base"
 
-tokenizer = AutoTokenizer.from_pretrained('xlm-roberta-base')
-model = AutoModelForMaskedLM.from_pretrained("xlm-roberta-base")
+tokenizer = AutoTokenizer.from_pretrained(roberta_model)
 
 train_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_train.jsonl',
                             tokenizer,
@@ -88,7 +86,7 @@ val_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_validation.jsonl',
                           tokenizer,
                           roberta_model)
 
-batch_size = 32
+batch_size = 33
 train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
 # only for evaluation - there are 10 negative samples and 1 positive sample
@@ -96,10 +94,20 @@ test_batch_size = 11
 test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
 val_loader = DataLoader(val_dataset, batch_size=test_batch_size)
 
-cross_encoder = CrossEncoder(model)
+cross_encoder = CrossEncoder(roberta_model)
+
+
+def load_model(cross_encoder):
+    load_path = "train_ce_e5step_dropout.pt"
+    cross_encoder.load_state_dict(torch.load(load_path))
+    logger.info(f"Model loaded successfully from {load_path}")
+
+
+# load_model(cross_encoder)
+
 cross_encoder.to(device)
 
-optimizer = AdamW(cross_encoder.parameters(), lr=1e-5)
+optimizer = AdamW(cross_encoder.parameters(), lr=1e-5, weight_decay=1e-2)
 loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
 
 start = time.time()
@@ -125,7 +133,7 @@ try:
             optimizer.step()
             train_batch_loss = loss.item()
 
-            if False:  # i % 500 == 0:
+            if i % 500 == 0:
                 logger.info(
                     f'({time.time() - start:0.2f}) Training batch {i}/{len(train_loader)} loss: {train_batch_loss}')
             total_loss += train_batch_loss
@@ -160,9 +168,10 @@ try:
                     f"AvgRank: {average_rank:0.4f} "
                     f"Loss: {loss_total}")
 
+
 except KeyboardInterrupt:
     logger.info(f"Early stopping in epoch {epoch} by user Ctrl+C interaction.")
 
 save_path = "cross_encoder.pt"
-torch.save(model.state_dict(), save_path)
+torch.save(cross_encoder.state_dict(), save_path)
 logger.info(f"Model saved to {save_path}")
