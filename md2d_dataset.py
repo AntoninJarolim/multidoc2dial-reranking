@@ -19,7 +19,7 @@ def break_to_pair(sentence):
 
 
 class MD2DDataset(IterableDataset):
-    def __init__(self, data_path, tokenizer, tokenizer_name, shuffle=False, retokenize=False):
+    def __init__(self, data_path, tokenizer_name, shuffle=False, retokenize=False):
         super(MD2DDataset).__init__()
 
         # tokenizer
@@ -29,6 +29,7 @@ class MD2DDataset(IterableDataset):
         self.preprocessed_f = f"data/{self.tokenizer_name}/{data_path.split('/')[-1]}"
         if not os.path.exists(self.preprocessed_f) or retokenize:
             os.makedirs(os.path.dirname(self.preprocessed_f), exist_ok=True)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
             self.preprocess_file(tokenizer, data_path)
 
         # data loading/iterating management
