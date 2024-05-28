@@ -100,7 +100,7 @@ def create_dpr_data(split):
         positive_passage_ids = list(df_queries["positive_passage_id"][start_idx:end_idx])
         positive_passage_texts = list(df_queries["positive_passage_text"][start_idx:end_idx])
 
-        passage_ids, scores, texts = get_top_passages(questions, 20)
+        passage_ids, scores, texts = get_top_passages(questions, 200)
         zipped_results = list(map(list, zip(passage_ids, scores, texts)))
 
         future_json = zip(questions, positive_passage_texts, positive_passage_ids, zipped_results)

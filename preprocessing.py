@@ -1,4 +1,5 @@
 import json
+import sys
 
 import jsonlines
 import torch
@@ -6,30 +7,59 @@ import torch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def create_pairs(split):
+def write_test_samples(dpr_res, writer):
+    q = dpr_res["question"].replace("[SEP]", "")
+
+    examples = []
+    for psg in dpr_res["DPR_result"]:
+        examples.append({
+            "x": f"{q}[SEP]{psg['text']}",
+            "label": int(psg['is_target'])
+        })
+    writer.write(examples)
+
+
+def write_train_samples(dpr_res, writer):
+    q = dpr_res["question"].replace("[SEP]", "")
+    pos_passage = dpr_res["positive_passage"]
+    writer.write({
+        "x": f"{q}[SEP]{pos_passage}",
+        "label": 1
+    })
+    for neg_psg in dpr_res["DPR_result"][10:]:
+        writer.write({
+            "x": f"{q}[SEP]{neg_psg['text']}",
+            "label": 0
+        })
+
+
+def create_train_pairs(split):
+    train_split = split == "train"
     with open(f'data/DPR/DPR_{split}.json', mode="r") as f:
         data = json.load(f)
 
     with jsonlines.open(f'data/DPR_pairs/DPR_pairs_{split}.jsonl', mode="w") as writer:
         for i, d in enumerate(data):
-            q = d["question"].replace("[SEP]", "")
-            pos_passage = d["positive_passage"]
-
-            writer.write({
-                "x": f"{q}[SEP]{pos_passage}",
-                "label": 1
-            })
-
-            for neg_psg in d["DPR_result"][10:]:
-                writer.write({
-                    "x": f"{q}[SEP]{neg_psg['text']}",
-                    "label": 0
-                })
+            if train_split:
+                write_train_samples(d, writer)
+            else:
+                write_test_samples(d, writer)
 
             if i % 100 == 0:
                 print(f"Processing {i}/{len(data)}.")
+    print(f"Processing finished.")
 
 
 if __name__ == "__main__":
-    for split in ["train", "validation", "test"]:
-        create_pairs(split)
+    split = sys.argv[1]
+
+    if split == "--train":
+        create_train_pairs("train")
+
+    elif split == "--test":
+        print("Processing testing data.")
+        create_train_pairs("test")
+        print("Processing validation data.")
+        create_train_pairs("validation")
+    else:
+        print("Please specify if you wish to create test or train data by --test or --train parameter.")
