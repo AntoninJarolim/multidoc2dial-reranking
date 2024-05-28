@@ -42,3 +42,11 @@ in one line.
 [ {"x": "q2[SEP]p-", "label": 0}, {"x": "q2[SEP]p-", "label": 0}, {"x": "q2[SEP]p+", "label": 1}]
 ...
 ```
+
+## Data loading
+
+Data loader class deriving from `IterableDataset` is implemented in `md2d_dataset.py`. It uses line index to access
+examples. As argument, it expects `jsonl` file from previous step and tokenizer which should be used to tokenize the
+data. For the data not to be tokenized every time during training, it tokenizes the data to the
+`f"data/{self.tokenizer_name}/{split_json}"` folder. Then, it creates line index to the same folder and prepends files
+with `locache.pkl` .
