@@ -42,19 +42,26 @@ class MD2DDataset(IterableDataset):
         with open(data_path, 'r') as infile, jsonlines.open(self.preprocessed_f, 'w') as outfile:
             for i, line in enumerate(infile):
                 obj = json.loads(line.strip())
-                pair = break_to_pair(obj['x'])
-                tokenized = tokenizer([pair], return_tensors="pt", padding="max_length", truncation=True,
-                                      max_length=128)
+                if type(obj) is list:
+                    tokenized = []
+                    for o in obj:
+                        tokenized.append(self.preprocess_example(o, tokenizer))
+                    outfile.write(tokenized)
+                else:
+                    self.preprocess_example(obj, tokenizer)
+                    outfile.write(obj)
 
-                obj['in_ids'] = tokenized["input_ids"][0].tolist()
-                obj['att_mask'] = tokenized["attention_mask"][0].tolist()
-                # print(obj['in_ids'])
-                # print(obj['att_mask'])
-                # print(tokenizer.convert_ids_to_tokens(tokenized["input_ids"][0]))
-                del obj['x']
-                outfile.write(obj)
                 if i % 1000 == 0:
                     print(f"{i}")
+
+    def preprocess_example(self, obj, tokenizer):
+        pair = break_to_pair(obj['x'])
+        tokenized = tokenizer([pair], return_tensors="pt", padding="max_length", truncation=True,
+                              max_length=128)
+        obj['in_ids'] = tokenized["input_ids"][0].tolist()
+        obj['att_mask'] = tokenized["attention_mask"][0].tolist()
+        del obj['x']
+        return obj
 
     def index_dataset(self):
         """
@@ -108,6 +115,18 @@ class MD2DDataset(IterableDataset):
         example = self.get_example(self.order[self.offset])
         self.offset += 1
 
+        if type(example) is not list:
+            example = self.tensorize_example(example)
+        else:
+            example2 = []
+            for o in example:
+                example2.append(self.tensorize_example(o))
+            example = example2
+
+        return example
+
+    @staticmethod
+    def tensorize_example(example):
         example['in_ids'] = torch.tensor(example['in_ids'])
         example['att_mask'] = torch.tensor(example['att_mask'])
         example['label'] = torch.tensor(example['label']).float()
@@ -130,17 +149,19 @@ if __name__ == "__main__":
     model = AutoModelForMaskedLM.from_pretrained("xlm-roberta-base")
 
     train_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_train.jsonl',
-                                tokenizer,
                                 roberta_model,
                                 shuffle=True)
 
-    batch_size = 10
+    batch_size = 11
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     # todo: mby add shuffle = True
 
-    for i, batch in enumerate(train_loader):
+    test_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_test.jsonl',
+                               roberta_model)
+    test_loader = DataLoader(test_dataset, batch_size=1)
+
+    for i, batch in enumerate(test_loader):
         print(i)
         print(batch)
-        print(batch.keys())
         pass
         break

@@ -9,50 +9,12 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForMaskedLM
 
 from md2d_dataset import MD2DDataset
+from utils import mrr_metric
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 start = time.time()
-
-
-def compute_mrr(preds, labels):
-    """
-    Compute Mean Reciprocal Rank (MRR).
-
-    Arguments:
-    pred -- Tensor of predicted scores.
-    labels -- Tensor of true labels.
-
-    Returns:
-    MRR -- Mean Reciprocal Rank for the batch.
-    """
-    # Ensure labels are in the correct shape
-    if not (labels[0] == 1 and all(label == 0 for label in labels[1:])):
-        if len(labels) % 11 != 0:
-            raise AssertionError("First label must be target and others non-targets")
-
-        # reshape and call recursively if not
-        # e.g. when preds and labels has sizes 33, it reshapes it to (3, 11) and calls recursively
-        nr_splits = len(labels) // 11
-        # take 11 members from a multiply by 11
-        preds_split = torch.reshape(preds, (nr_splits, 11))
-        labels_split = torch.reshape(labels, (nr_splits, 11))
-        total_rank, total_rr = 0, 0
-        for x in range(nr_splits):
-            rr, rank = compute_mrr(preds_split[x], labels_split[x])
-            total_rr += rr
-            total_rank += rank
-        return total_rr / nr_splits, total_rank / nr_splits
-
-    # Get the indices that would sort the predictions in descending order
-    sorted_indices = torch.argsort(preds, descending=True)
-
-    # Find the rank of the true target (which is always at index 0 in labels)
-    rank = (sorted_indices == 0).nonzero(as_tuple=True)[0].item() + 1
-
-    # Calculate the reciprocal rank
-    return 1.0 / rank, rank
 
 
 class CrossEncoder(torch.nn.Module):
@@ -95,7 +57,7 @@ class CrossEncoder(torch.nn.Module):
             loss = loss_fn(pred, batch['label'])
             loss_total += loss.item()
             # Compute MRR for the current batch
-            batch_mrr, rank = compute_mrr(pred, batch['label'])
+            batch_mrr, rank = mrr_metric(pred, batch['label'])
             rr_total += batch_mrr
             rank_total += rank
 
