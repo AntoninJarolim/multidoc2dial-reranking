@@ -26,7 +26,7 @@ def write_train_samples(dpr_res, writer):
         "x": f"{q}[SEP]{pos_passage}",
         "label": 1
     })
-    for neg_psg in dpr_res["DPR_result"][10:]:
+    for neg_psg in dpr_res["DPR_result"][10:20]:
         writer.write({
             "x": f"{q}[SEP]{neg_psg['text']}",
             "label": 0
