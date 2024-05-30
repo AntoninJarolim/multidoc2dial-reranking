@@ -50,3 +50,28 @@ examples. As argument, it expects `jsonl` file from previous step and tokenizer 
 data. For the data not to be tokenized every time during training, it tokenizes the data to the
 `f"data/{self.tokenizer_name}/{split_json}"` folder. Then, it creates line index to the same folder and prepends files
 with `locache.pkl` .
+
+## Others
+
+### Baseline recall
+
+`python main.py --compute_recall_at_k` computes R@1, R@5, R@10, R@50 and R@200.
+Computing recall for data/DPR_pairs/DPR_pairs_test.jsonl.
+
+```
+R@1: 37.88
+R@5: 67.22
+R@10: 76.94
+R@50: 90.69
+R@200: 96.75
+```
+
+Computing recall for data/DPR_pairs/DPR_pairs_validation.jsonl.
+
+```
+R@1: 36.82
+R@5: 66.63
+R@10: 75.34
+R@50: 89.60
+R@200: 95.50    
+```
