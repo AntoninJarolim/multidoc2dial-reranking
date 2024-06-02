@@ -7,16 +7,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a cross encoder model.")
 
     parser.add_argument("--train", default=False, action='store_true')
-    parser.add_argument("--num_epochs", type=int, default=30, help="Number of epochs for training")
+    parser.add_argument("--num_epochs", type=int, default=30,
+                        help="Number of epochs for training")
     parser.add_argument("--stop_time", type=str, default=None,
                         help="Number of seconds after which training on another epoch will not start.")
-    parser.add_argument("--load_model_path", type=str, default=None, help="Path to load the model from")
-    parser.add_argument("--save_model_path", type=str, default="cross_encoder.pt", help="Path to save the model to")
+    parser.add_argument("--load_model_path", type=str, default=None,
+                        help="Path to load the model from")
+    parser.add_argument("--save_model_path", type=str, default="cross_encoder.pt",
+                        help="Path to save the model to")
     parser.add_argument("--bert_model_name", type=str, default="FacebookAI/xlm-roberta-base",
                         help="Name of the BERT model")
-    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
-    parser.add_argument("--weight_decay", type=float, default=1e-1, help="Weight decay")
-    parser.add_argument("--dropout_rate", type=float, default=0.1, help="Dropout rate")
+    parser.add_argument("--lr", type=float, default=1e-5,
+                        help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=1e-1,
+                        help="Weight decay")
+    parser.add_argument("--dropout_rate", type=float, default=0.1,
+                        help="Dropout rate")
 
     parser.add_argument("--compute_recall_at_k", default=False, action='store_true')
 
