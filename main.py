@@ -7,9 +7,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a cross encoder model.")
 
     parser.add_argument("--train", default=False, action='store_true')
-    parser.add_argument("--num_epochs", type=int, default=100, help="Number of epochs for training")
-    parser.add_argument("--nr_train_samples_testing", type=int, default=1000,
-                        help="Number of training samples for testing")
+    parser.add_argument("--num_epochs", type=int, default=30, help="Number of epochs for training")
+    parser.add_argument("--stop_time", type=str, default=None,
+                        help="Number of seconds after which training on another epoch will not start.")
     parser.add_argument("--load_model_path", type=str, default=None, help="Path to load the model from")
     parser.add_argument("--save_model_path", type=str, default="cross_encoder.pt", help="Path to save the model to")
     parser.add_argument("--bert_model_name", type=str, default="FacebookAI/xlm-roberta-base",
@@ -22,24 +22,23 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # allows specifying train time in hours by converting hours to seconds
+    # time in seconds is required in training loop
+    if args.stop_time is not None and args.stop_time.endswith("h"):
+        args.stop_time = int(args.stop_time.strip("h")) * 60 * 60
+
     if args.train:
-        print(f"num_epochs: {args.num_epochs}")
-        print(f"nr_train_samples_testing: {args.nr_train_samples_testing}")
-        print(f"load_model_path: {args.load_model_path}")
-        print(f"save_model_path: {args.save_model_path}")
-        print(f"bert_model_name: {args.bert_model_name}")
-        print(f"lr: {args.lr}")
-        print(f"weight_decay: {args.weight_decay}")
-        print(f"dropout_rate: {args.dropout_rate}")
+        for key, value in vars(args).items():
+            print(f"{key}: {value}")
 
         tce.train_ce(num_epochs=args.num_epochs,
-                     nr_train_samples_testing=args.nr_train_samples_testing,
                      load_model_path=args.load_model_path,
                      save_model_path=args.save_model_path,
                      bert_model_name=args.bert_model_name,
                      lr=args.lr,
                      weight_decay=args.weight_decay,
-                     dropout_rate=args.dropout_rate)
+                     dropout_rate=args.dropout_rate,
+                     stop_time=args.stop_time)
 
     if args.compute_recall_at_k:
         ks = [1, 5, 10, 50, 200]

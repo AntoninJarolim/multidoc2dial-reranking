@@ -1,5 +1,6 @@
 import json
 
+import numpy as np
 import torch
 
 
@@ -14,32 +15,16 @@ def mrr_metric(preds, labels):
     Returns:
     MRR -- Mean Reciprocal Rank for the batch.
     """
-    # Ensure labels are in the correct shape
-    if not (labels[0] == 1 and all(label == 0 for label in labels[1:])):
-        if len(labels) % 11 != 0:
-            raise AssertionError("First label must be target and others non-targets")
 
-        # reshape and call recursively if not
-        # e.g. when preds and labels has sizes 33, it reshapes it to (3, 11) and calls recursively
-        nr_splits = len(labels) // 11
-        # take 11 members from a multiply by 11
-        preds_split = torch.reshape(preds, (nr_splits, 11))
-        labels_split = torch.reshape(labels, (nr_splits, 11))
-        total_rank, total_rr = 0, 0
-        for x in range(nr_splits):
-            rr, rank = mrr_metric(preds_split[x], labels_split[x])
-            total_rr += rr
-            total_rank += rank
-        return total_rr / nr_splits, total_rank / nr_splits
+    # skip computation if all labels are 0
+    if sum(labels) == 0:
+        return 0
 
-    # Get the indices that would sort the predictions in descending order
     sorted_indices = torch.argsort(preds, descending=True)
-
-    # Find the rank of the true target (which is always at index 0 in labels)
-    rank = (sorted_indices == 0).nonzero(as_tuple=True)[0].item() + 1
-
+    sorted_labels = labels[sorted_indices]
+    rank = np.argwhere(sorted_labels.cpu()).flatten().item() + 1
     # Calculate the reciprocal rank
-    return 1.0 / rank, rank
+    return 1.0 / rank
 
 
 def recall_metric(sorted_labels, ks):
@@ -51,6 +36,16 @@ def recall_metric(sorted_labels, ks):
 
     recall_ks = [sum(sorted_labels[:k]) for k in ks]
     return recall_ks
+
+
+def pred_recall_metric(pred, labels, ks):
+    # skip computation if all labels are 0
+    if sum(labels) == 0:
+        return torch.zeros(len(ks))
+
+    sorted_indexes = torch.argsort(pred, descending=True)
+    sorted_labels = labels[sorted_indexes]
+    return recall_metric(sorted_labels, ks)
 
 
 def compute_recall(path, ks):
@@ -66,3 +61,20 @@ def compute_recall(path, ks):
         N = recalls.shape[0]
         sum_recalls = torch.sum(recalls, dim=0) / N
     return sum_recalls
+
+
+def transform_batch(batch, take_n=0):
+    if take_n > 0:
+        batch = batch[:take_n]
+
+    # Gather 'label', 'in_ids', and 'att_mask' from these members
+    labels = torch.vstack([item['label'] for item in batch]).flatten()
+    in_ids = torch.vstack([item['in_ids'] for item in batch])
+    att_masks = torch.vstack([item['att_mask'] for item in batch])
+
+    # Combine into a dictionary as expected by your code
+    return {
+        'label': labels,
+        'in_ids': in_ids,
+        'att_mask': att_masks
+    }

@@ -3,6 +3,7 @@ import logging
 import os
 import pickle
 import random as rnd
+from json import JSONDecodeError
 
 import jsonlines
 import torch
@@ -102,7 +103,13 @@ class MD2DDataset(IterableDataset):
             self.preprocessed_f_handle = open(self.preprocessed_f)
 
         self.preprocessed_f_handle.seek(self._line_offsets[n])
-        return json.loads(self.preprocessed_f_handle.readline().strip())
+        try:
+            example = json.loads(self.preprocessed_f_handle.readline().strip())
+        except JSONDecodeError:
+            self.preprocessed_f_handle.seek(self._line_offsets[n])
+            print("Failed to load line:")
+            print(self.preprocessed_f_handle.readline().strip())
+        return example
 
     def __len__(self):
         return len(self._line_offsets)
