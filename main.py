@@ -1,9 +1,32 @@
 import argparse
+import logging
+import os
+from datetime import datetime
 
 import train_ce as tce
 from utils import compute_recall
 
+
+def setup_logging():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    log_file = os.path.join('logs', f'log_{current_time}.log')
+
+    file_handler = logging.FileHandler(log_file)
+    console_handler = logging.StreamHandler()
+
+    logger.addHandler(console_handler)
+    console_handler.setLevel(logging.INFO)
+
+    logger.addHandler(file_handler)
+    file_handler.setLevel(logging.INFO)
+
+
 if __name__ == "__main__":
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="Train a cross encoder model.")
 
     parser.add_argument("--train", default=False, action='store_true')

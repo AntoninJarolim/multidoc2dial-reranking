@@ -1,7 +1,4 @@
-import logging
-import os
 import time
-from datetime import datetime
 
 import torch
 import torch.nn.init as init
@@ -12,21 +9,6 @@ from transformers import AutoModelForMaskedLM
 
 from md2d_dataset import MD2DDataset
 from utils import mrr_metric, transform_batch, pred_recall_metric
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-log_file = os.path.join('logs', f'log_{current_time}.log')
-
-file_handler = logging.FileHandler(log_file)
-console_handler = logging.StreamHandler()
-
-logger.addHandler(console_handler)
-console_handler.setLevel(logging.INFO)
-
-logger.addHandler(file_handler)
-file_handler.setLevel(logging.INFO)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 start_t = time.time()
