@@ -67,13 +67,8 @@ def compute_recall(path, ks):
 
 
 def transform_batch(batch, take_n=0):
-    logger.info(f"Type of batch: {type(batch)}")  # Add this line to check the type of batch
     if take_n > 0:
-        if isinstance(batch, (list, tuple)):
-            batch = batch[:take_n]
-        else:
-            raise TypeError(f"Expected batch to be a list or tuple, but got {type(batch)}")
-
+        batch = batch[:take_n]
     # Gather 'label', 'in_ids', and 'att_mask' from these members
     labels = torch.vstack([item['label'] for item in batch]).flatten()
     in_ids = torch.vstack([item['in_ids'] for item in batch])
