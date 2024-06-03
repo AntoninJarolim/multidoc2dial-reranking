@@ -51,6 +51,7 @@ class CrossEncoder(torch.nn.Module):
         recalls = []
 
         for i, batch in enumerate(data_loader):
+            logger.info(f"Batch: {batch}")
             logger.info(f"Batch {i} type before transform: {type(batch)}")  # Debugging line
             batch = transform_batch(batch, take_n)
             batch = {k: v.to(device) for k, v in batch.items()}
