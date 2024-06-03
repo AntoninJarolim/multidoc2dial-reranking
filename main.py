@@ -44,6 +44,8 @@ if __name__ == "__main__":
                         help="Dropout rate")
     parser.add_argument("--label_smoothing", type=float, default=0,
                         help="Label smoothing rate (float between 0 and 1), default=0")
+    parser.add_argument("--gradient_clip", type=float, default=0,
+                        help="Gradient clipping `max_norm` param (float between 0 and 1), default=0")
 
     parser.add_argument("--compute_recall_at_k", default=False, action='store_true')
 
@@ -66,7 +68,8 @@ if __name__ == "__main__":
                      weight_decay=args.weight_decay,
                      dropout_rate=args.dropout_rate,
                      stop_time=args.stop_time,
-                     label_smoothing=args.label_smoothing)
+                     label_smoothing=args.label_smoothing,
+                     gradient_clip=args.gradient_clip)
 
     if args.compute_recall_at_k:
         ks = [1, 5, 10, 50, 200]

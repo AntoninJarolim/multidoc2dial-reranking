@@ -111,7 +111,10 @@ def train_ce(num_epochs=30,
              optimizer=None,
              loss_fn=None,
              stop_time=None,
-             label_smoothing=0):
+             label_smoothing=0,
+             gradient_clip=0, ):
+    gradient_clip = None if gradient_clip == 0 else gradient_clip
+
     cross_encoder = CrossEncoder(bert_model_name, dropout_rate=dropout_rate)
     if load_model_path is not None:
         load_model(cross_encoder, load_model_path)
@@ -121,7 +124,8 @@ def train_ce(num_epochs=30,
     loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
 
     try:
-        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing)
+        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
+                      gradient_clip)
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
 
@@ -142,7 +146,8 @@ def train_ce(num_epochs=30,
                     f"negative-loss: {neg_loss:0.2f} ")
 
 
-def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing):
+def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
+                  gradient_clip):
     train_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_train.jsonl',
                                 bert_model_name,
                                 label_smoothing=label_smoothing,
@@ -188,6 +193,8 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
             loss = loss_fn(pred, batch['label'])
 
             loss.backward()
+            if gradient_clip is not None:
+                torch.nn.utils.clip_grad_norm(cross_encoder.parameters(), gradient_clip)
             optimizer.step()
             train_batch_loss = loss.item()
 
