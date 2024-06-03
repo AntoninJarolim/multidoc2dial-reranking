@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     if args.train:
         for key, value in vars(args).items():
-            print(f"{key}: {value}")
+            logger.info(f"{key}: {value}")
 
         tce.train_ce(num_epochs=args.num_epochs,
                      load_model_path=args.load_model_path,
