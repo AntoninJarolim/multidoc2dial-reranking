@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import torch
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('main')
 
 
 def mrr_metric(preds, labels):

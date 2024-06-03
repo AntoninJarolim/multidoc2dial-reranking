@@ -6,7 +6,7 @@ from datetime import datetime
 import train_ce as tce
 from utils import compute_recall
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('main')
 logger.setLevel(logging.INFO)
 
 current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

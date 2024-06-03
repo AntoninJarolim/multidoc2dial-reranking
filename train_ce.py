@@ -11,7 +11,7 @@ from transformers import AutoModelForMaskedLM
 from md2d_dataset import MD2DDataset
 from utils import mrr_metric, transform_batch, pred_recall_metric
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 start_t = time.time()
 
