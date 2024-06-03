@@ -132,8 +132,12 @@ class MD2DDataset(IterableDataset):
         example['att_mask'] = torch.tensor(example['att_mask'])
 
         # Label smoothing for two classes
-        eps = self.label_smoothing
-        example['label'] = torch.tensor(example['label']).float() * (1 - eps) + eps / 2
+        if self.label_smoothing != 0:
+            eps = self.label_smoothing
+            label = torch.tensor(example['label']).float() * (1 - eps) + eps / 2
+        else:
+            label = torch.tensor(example['label']).float()
+        example['label'] = label
         return example
 
     def __iter__(self):
