@@ -1,0 +1,3 @@
+Model loaded successfully from ce_7100.pt
+Model saved to cross_encoder.pt
+(1447.63) Final test on test dataset!MRR: 0.40; Recalls: tensor([0.2910, 0.5176, 0.5931]) Loss: 61952.25positive-loss: 64.54; negative-loss: 61887.70 
