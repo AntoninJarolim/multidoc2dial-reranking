@@ -110,7 +110,8 @@ def train_ce(num_epochs=30,
              dropout_rate=0.1,
              optimizer=None,
              loss_fn=None,
-             stop_time=None):
+             stop_time=None,
+             label_smoothing=0):
     cross_encoder = CrossEncoder(bert_model_name, dropout_rate=dropout_rate)
     if load_model_path is not None:
         load_model(cross_encoder, load_model_path)
@@ -120,7 +121,7 @@ def train_ce(num_epochs=30,
     loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
 
     try:
-        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time)
+        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing)
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
 
@@ -141,9 +142,10 @@ def train_ce(num_epochs=30,
                     f"negative-loss: {neg_loss:0.2f} ")
 
 
-def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time):
+def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing):
     train_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_train.jsonl',
                                 bert_model_name,
+                                label_smoothing=label_smoothing,
                                 shuffle=False)
 
     test_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_test.jsonl',
@@ -163,16 +165,16 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
         logger.info(f"({time.time() - start_t:0.2f})------------- Training epoch {epoch} started -------------")
 
         # TESTING - MRR
-        cross_encoder.eval()
-        with torch.no_grad():
-            average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader, loss_fn,
-                                                                                              take_n=32)
-            logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on test dataset: "
-                        f"MRR: {average_mrr:0.2f}; "
-                        f"Recalls: {sum_recalls} "
-                        f"Loss: {total_loss:0.2f}"
-                        f"positive-loss: {pos_loss:0.2f}; "
-                        f"negative-loss: {neg_loss:0.2f} ")
+        # cross_encoder.eval()
+        # with torch.no_grad():
+        #     average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader, loss_fn,
+        #                                                                                       take_n=32)
+        #     logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on test dataset: "
+        #                 f"MRR: {average_mrr:0.2f}; "
+        #                 f"Recalls: {sum_recalls} "
+        #                 f"Loss: {total_loss:0.2f}"
+        #                 f"positive-loss: {pos_loss:0.2f}; "
+        #                 f"negative-loss: {neg_loss:0.2f} ")
 
         # training
         total_loss, loss_positive, loss_negative = 0, 0, 0
@@ -222,4 +224,20 @@ def separate_losses(batch, loss_fn, pred, loss_negative, loss_positive):
 
 
 if __name__ == "__main__":
-    train_ce()
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    import torch
+
+    model = AutoModelForSequenceClassification.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    tokenizer = AutoTokenizer.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+    features = tokenizer(['How many people live in Berlin?', 'How many people live in Berlin?'], [
+        'Berlin has a population of 3,520,031 registered inhabitants in an area of 891.82 square kilometers.',
+        'New York City is famous for the Metropolitan Museum of Art.'], padding=True, truncation=True,
+                         return_tensors="pt")
+
+    model.eval()
+    with torch.no_grad():
+        scores = model(**features).logits
+        print(scores)
+
+    # train_ce()

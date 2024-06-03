@@ -3,7 +3,6 @@ import logging
 import os
 import pickle
 import random as rnd
-from json import JSONDecodeError
 
 import jsonlines
 import torch
@@ -20,7 +19,7 @@ def break_to_pair(sentence):
 
 
 class MD2DDataset(IterableDataset):
-    def __init__(self, data_path, tokenizer_name, shuffle=False, retokenize=False):
+    def __init__(self, data_path, tokenizer_name, shuffle=False, retokenize=False, label_smoothing=0):
         super(MD2DDataset).__init__()
 
         # tokenizer
@@ -34,6 +33,7 @@ class MD2DDataset(IterableDataset):
             self.preprocess_file(tokenizer, data_path)
 
         # data loading/iterating management
+        self.label_smoothing = label_smoothing
         self.shuffle = shuffle
         self._line_offsets = self.index_dataset()
         self.offset = 0
@@ -103,12 +103,7 @@ class MD2DDataset(IterableDataset):
             self.preprocessed_f_handle = open(self.preprocessed_f)
 
         self.preprocessed_f_handle.seek(self._line_offsets[n])
-        try:
-            example = json.loads(self.preprocessed_f_handle.readline().strip())
-        except JSONDecodeError:
-            self.preprocessed_f_handle.seek(self._line_offsets[n])
-            print("Failed to load line:")
-            print(self.preprocessed_f_handle.readline().strip())
+        example = json.loads(self.preprocessed_f_handle.readline().strip())
         return example
 
     def __len__(self):
@@ -123,20 +118,22 @@ class MD2DDataset(IterableDataset):
         self.offset += 1
 
         if type(example) is not list:
-            example = self.tensorize_example(example)
+            example = self.transform_example(example)
         else:
             example2 = []
             for o in example:
-                example2.append(self.tensorize_example(o))
+                example2.append(self.transform_example(o))
             example = example2
 
         return example
 
-    @staticmethod
-    def tensorize_example(example):
+    def transform_example(self, example):
         example['in_ids'] = torch.tensor(example['in_ids'])
         example['att_mask'] = torch.tensor(example['att_mask'])
-        example['label'] = torch.tensor(example['label']).float()
+
+        # Label smoothing for two classes
+        eps = self.label_smoothing
+        example['label'] = torch.tensor(example['label']).float() * (1 - eps) + eps / 2
         return example
 
     def __iter__(self):
