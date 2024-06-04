@@ -1,0 +1,158 @@
+train: True
+num_epochs: 30
+stop_time: 18000
+load_model_path: None
+save_model_path: ce_lr1e-5_wd1e-1_dr0.1_ls0_gc3.pt
+bert_model_name: FacebookAI/xlm-roberta-base
+lr: 1e-05
+weight_decay: 0.1
+dropout_rate: 0.1
+label_smoothing: 0.0
+gradient_clip: 3.0
+compute_recall_at_k: False
+(46.49)------------- Training epoch 0 started -------------
+(291.65) Epoch 0 on test dataset: MRR: 0.10; Recalls: tensor([0.0163, 0.1146, 0.2591]) Loss: 12118.02positive-loss: 851.37; negative-loss: 11266.65 
+(294.44) Training batch 0/7151 loss: 1.3028465509414673
+(443.59) Training batch 500/7151 loss: 1.065233826637268
+(592.68) Training batch 1000/7151 loss: 1.322277307510376
+(741.75) Training batch 1500/7151 loss: 0.20188471674919128
+(890.80) Training batch 2000/7151 loss: 0.9623737931251526
+(1039.87) Training batch 2500/7151 loss: 1.2626700401306152
+(1189.01) Training batch 3000/7151 loss: 0.32947802543640137
+(1338.38) Training batch 3500/7151 loss: 0.9486311674118042
+(1487.75) Training batch 4000/7151 loss: 0.5585463643074036
+(1637.09) Training batch 4500/7151 loss: 0.8139064311981201
+(1786.30) Training batch 5000/7151 loss: 0.30442771315574646
+(1935.40) Training batch 5500/7151 loss: 0.5748494863510132
+(2084.32) Training batch 6000/7151 loss: 0.3665510416030884
+(2233.21) Training batch 6500/7151 loss: 1.0915430784225464
+(2382.09) Training batch 7000/7151 loss: 0.7502874732017517
+(2426.61) Epoch 0 on training dataset: loss: 43855.66745255701; positive-loss: 40955.98; negative-loss: 2899.69 
+(2426.61)------------- Training epoch 1 started -------------
+(2662.59) Epoch 1 on test dataset: MRR: 0.46; Recalls: tensor([0.3314, 0.6100, 0.7122]) Loss: 14184.06positive-loss: 389.77; negative-loss: 13794.29 
+(2663.03) Training batch 0/7151 loss: 2.1548588275909424
+(2812.05) Training batch 500/7151 loss: 0.163570374250412
+(2961.03) Training batch 1000/7151 loss: 1.204298734664917
+(3109.98) Training batch 1500/7151 loss: 0.07762618362903595
+(3258.95) Training batch 2000/7151 loss: 0.8951724171638489
+(3407.80) Training batch 2500/7151 loss: 0.8188064694404602
+(3556.49) Training batch 3000/7151 loss: 0.30513250827789307
+(3705.32) Training batch 3500/7151 loss: 0.4369552433490753
+(3854.31) Training batch 4000/7151 loss: 0.7433637976646423
+(4003.47) Training batch 4500/7151 loss: 0.39893096685409546
+(4152.55) Training batch 5000/7151 loss: 0.21966077387332916
+(4301.45) Training batch 5500/7151 loss: 0.28233176469802856
+(4450.36) Training batch 6000/7151 loss: 0.14157722890377045
+(4599.24) Training batch 6500/7151 loss: 0.7150012254714966
+(4748.13) Training batch 7000/7151 loss: 0.8090581893920898
+(4792.62) Epoch 1 on training dataset: loss: 39118.43055193848; positive-loss: 36993.82; negative-loss: 2124.61 
+(4792.62)------------- Training epoch 2 started -------------
+(5028.38) Epoch 2 on test dataset: MRR: 0.45; Recalls: tensor([0.3197, 0.5918, 0.7064]) Loss: 26848.46positive-loss: 196.39; negative-loss: 26652.07 
+(5028.75) Training batch 0/7151 loss: 3.019904851913452
+(5177.79) Training batch 500/7151 loss: 0.20665258169174194
+(5326.90) Training batch 1000/7151 loss: 2.1180429458618164
+(5475.88) Training batch 1500/7151 loss: 0.07355337589979172
+(5624.73) Training batch 2000/7151 loss: 0.48325976729393005
+(5773.58) Training batch 2500/7151 loss: 0.8059620261192322
+(5922.47) Training batch 3000/7151 loss: 0.41327327489852905
+(6071.35) Training batch 3500/7151 loss: 0.24933379888534546
+(6220.18) Training batch 4000/7151 loss: 0.636491060256958
+(6369.17) Training batch 4500/7151 loss: 0.41336843371391296
+(6518.26) Training batch 5000/7151 loss: 0.25311312079429626
+(6667.37) Training batch 5500/7151 loss: 0.09404269605875015
+(6816.40) Training batch 6000/7151 loss: 0.04426673799753189
+(6965.30) Training batch 6500/7151 loss: 0.46741729974746704
+(7114.17) Training batch 7000/7151 loss: 0.45955348014831543
+(7158.68) Epoch 2 on training dataset: loss: 36400.746387702355; positive-loss: 34735.85; negative-loss: 1664.90 
+(7158.68)------------- Training epoch 3 started -------------
+(7394.12) Epoch 3 on test dataset: MRR: 0.46; Recalls: tensor([0.3359, 0.5990, 0.6953]) Loss: 27683.12positive-loss: 193.75; negative-loss: 27489.37 
+(7394.49) Training batch 0/7151 loss: 2.264460325241089
+(7543.32) Training batch 500/7151 loss: 0.13277190923690796
+(7692.22) Training batch 1000/7151 loss: 1.8573956489562988
+(7841.29) Training batch 1500/7151 loss: 0.028576862066984177
+(7990.32) Training batch 2000/7151 loss: 0.22712941467761993
+(8139.31) Training batch 2500/7151 loss: 0.9716545343399048
+(8288.18) Training batch 3000/7151 loss: 0.3280870318412781
+(8437.04) Training batch 3500/7151 loss: 0.4590981602668762
+(8585.86) Training batch 4000/7151 loss: 0.46928486227989197
+(8734.69) Training batch 4500/7151 loss: 0.44167178869247437
+(8883.48) Training batch 5000/7151 loss: 0.044285353273153305
+(9032.34) Training batch 5500/7151 loss: 0.5472280383110046
+(9181.29) Training batch 6000/7151 loss: 0.04671572148799896
+(9330.28) Training batch 6500/7151 loss: 0.7548272013664246
+(9479.21) Training batch 7000/7151 loss: 0.4522643983364105
+(9523.73) Epoch 3 on training dataset: loss: 33380.43754119496; positive-loss: 31987.86; negative-loss: 1392.58 
+(9523.73)------------- Training epoch 4 started -------------
+(9759.08) Epoch 4 on test dataset: MRR: 0.42; Recalls: tensor([0.2995, 0.5443, 0.6654]) Loss: 44402.36positive-loss: 108.68; negative-loss: 44293.68 
+(9759.46) Training batch 0/7151 loss: 1.9722651243209839
+(9908.34) Training batch 500/7151 loss: 0.04959985986351967
+(10057.09) Training batch 1000/7151 loss: 1.8086899518966675
+(10205.89) Training batch 1500/7151 loss: 0.018359361216425896
+(10354.70) Training batch 2000/7151 loss: 0.04500283673405647
+(10503.67) Training batch 2500/7151 loss: 0.9569854140281677
+(10652.64) Training batch 3000/7151 loss: 0.25344404578208923
+(10801.57) Training batch 3500/7151 loss: 0.13087457418441772
+(10950.41) Training batch 4000/7151 loss: 0.40657323598861694
+(11099.24) Training batch 4500/7151 loss: 1.1362249851226807
+(11248.01) Training batch 5000/7151 loss: 0.23586073517799377
+(11396.81) Training batch 5500/7151 loss: 0.39013782143592834
+(11545.61) Training batch 6000/7151 loss: 0.026399461552500725
+(11694.52) Training batch 6500/7151 loss: 1.3461803197860718
+(11843.49) Training batch 7000/7151 loss: 0.4359194338321686
+(11888.04) Epoch 4 on training dataset: loss: 31847.48639478141; positive-loss: 30674.68; negative-loss: 1172.81 
+(11888.04)------------- Training epoch 5 started -------------
+(12123.69) Epoch 5 on test dataset: MRR: 0.45; Recalls: tensor([0.3320, 0.5775, 0.6771]) Loss: 32841.24positive-loss: 244.07; negative-loss: 32597.16 
+(12124.05) Training batch 0/7151 loss: 1.4684773683547974
+(12272.92) Training batch 500/7151 loss: 0.002382262609899044
+(12421.65) Training batch 1000/7151 loss: 1.8193532228469849
+(12570.39) Training batch 1500/7151 loss: 0.010350757278501987
+(12719.06) Training batch 2000/7151 loss: 0.05325530841946602
+(12867.84) Training batch 2500/7151 loss: 0.8697224855422974
+(13016.70) Training batch 3000/7151 loss: 0.10149551182985306
+(13165.77) Training batch 3500/7151 loss: 0.1364210546016693
+(13314.83) Training batch 4000/7151 loss: 0.2812822163105011
+(13463.89) Training batch 4500/7151 loss: 0.5337669849395752
+(13612.75) Training batch 5000/7151 loss: 0.11987940967082977
+(13761.57) Training batch 5500/7151 loss: 1.1522303819656372
+(13910.37) Training batch 6000/7151 loss: 0.04258985072374344
+(14059.16) Training batch 6500/7151 loss: 0.8942825198173523
+(14207.91) Training batch 7000/7151 loss: 0.5894961953163147
+(14252.41) Epoch 5 on training dataset: loss: 29412.214039269405; positive-loss: 28389.15; negative-loss: 1023.07 
+(14252.41)------------- Training epoch 6 started -------------
+(14487.76) Epoch 6 on test dataset: MRR: 0.42; Recalls: tensor([0.3034, 0.5495, 0.6582]) Loss: 57017.68positive-loss: 101.07; negative-loss: 56916.62 
+(14488.13) Training batch 0/7151 loss: 2.059687376022339
+(14637.16) Training batch 500/7151 loss: 0.0006774735520593822
+(14786.08) Training batch 1000/7151 loss: 2.5175838470458984
+(14934.97) Training batch 1500/7151 loss: 0.00719379261136055
+(15083.84) Training batch 2000/7151 loss: 0.14107893407344818
+(15232.77) Training batch 2500/7151 loss: 0.5555124282836914
+(15381.55) Training batch 3000/7151 loss: 0.11484941840171814
+(15530.38) Training batch 3500/7151 loss: 0.5178843140602112
+(15679.17) Training batch 4000/7151 loss: 0.39297693967819214
+(15828.09) Training batch 4500/7151 loss: 0.35445135831832886
+(15977.07) Training batch 5000/7151 loss: 0.005318873096257448
+(16125.99) Training batch 5500/7151 loss: 0.015037301927804947
+(16274.88) Training batch 6000/7151 loss: 0.003991033416241407
+(16423.74) Training batch 6500/7151 loss: 2.5174474716186523
+(16572.59) Training batch 7000/7151 loss: 0.4301067888736725
+(16617.09) Epoch 6 on training dataset: loss: 27543.55117745934; positive-loss: 26640.32; negative-loss: 903.23 
+(16617.09)------------- Training epoch 7 started -------------
+(16852.29) Epoch 7 on test dataset: MRR: 0.43; Recalls: tensor([0.3190, 0.5579, 0.6634]) Loss: 63619.32positive-loss: 87.33; negative-loss: 63531.99 
+(16852.67) Training batch 0/7151 loss: 2.7212836742401123
+(17001.51) Training batch 500/7151 loss: 0.001064949668943882
+(17150.28) Training batch 1000/7151 loss: 1.7280998229980469
+(17299.08) Training batch 1500/7151 loss: 0.05508895590901375
+(17448.00) Training batch 2000/7151 loss: 0.0187129657715559
+(17597.05) Training batch 2500/7151 loss: 1.5663739442825317
+(17746.03) Training batch 3000/7151 loss: 0.016753774136304855
+(17895.07) Training batch 3500/7151 loss: 0.035188496112823486
+(18043.93) Training batch 4000/7151 loss: 0.15296360850334167
+(18192.79) Training batch 4500/7151 loss: 0.49051836133003235
+(18341.57) Training batch 5000/7151 loss: 0.004403706174343824
+(18490.33) Training batch 5500/7151 loss: 0.045627277344465256
+(18639.06) Training batch 6000/7151 loss: 0.0017911972245201468
+(18787.81) Training batch 6500/7151 loss: 1.2157500982284546
+(18936.71) Training batch 7000/7151 loss: 0.0483846552670002
+(18981.27) Epoch 7 on training dataset: loss: 24916.09826884501; positive-loss: 24110.95; negative-loss: 805.15 
+Model saved to ce_lr1e-5_wd1e-1_dr0.1_ls0_gc3.pt
+(20349.42) Final test on test dataset!MRR: 0.38; Recalls: tensor([0.2865, 0.4714, 0.5293]) Loss: 83633.85positive-loss: 26.17; negative-loss: 83607.68 
