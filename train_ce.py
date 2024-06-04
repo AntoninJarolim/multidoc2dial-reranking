@@ -219,9 +219,9 @@ def separate_loss(batch, loss_fn, pred, mask_label):
     mask = (batch['label'] == mask_label).flatten()
     mask_loss = 0
     if mask.sum() > 0:  # Check if there are samples
-        pred_positive = pred[mask]
+        pred_mask = pred[mask]
         mask_labels = batch['label'][mask]
-        mask_loss = loss_fn(pred_positive, mask_labels).item()
+        mask_loss = loss_fn(pred_mask, mask_labels).item()
     return mask_loss
 
 
