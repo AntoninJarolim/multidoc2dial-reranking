@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 
@@ -46,10 +47,15 @@ class CrossEncoder(torch.nn.Module):
         cls_features = last_hidden_state[:, 0, :]
         return cls_features
 
-    def evaluate(self, data_loader, loss_fn, take_n=0):
+    def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True):
         rr_total = 0
         loss_negative, loss_positive = 0, 0
         recalls = []
+
+        # Required for save_all_losses=True
+        bce_no_reduce = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10), reduction='none')
+        losses = torch.empty(0)
+        labels = torch.empty(0)
 
         for i, batch in enumerate(data_loader):
             batch = transform_batch(batch, take_n)
@@ -65,6 +71,18 @@ class CrossEncoder(torch.nn.Module):
             # Compute R@ks for the current batch
             recall = pred_recall_metric(pred, batch['label'], [1, 5, 10])
             recalls.append(recall)
+
+            if save_all_losses:
+                loss = bce_no_reduce(pred, batch['label']).cpu()
+                losses = torch.cat((losses, loss), dim=0)
+                labels = torch.cat((labels, batch['label'].cpu()), dim=0)
+
+        if save_all_losses:
+            all_data = {
+                'labels': labels.tolist(),
+                'losses': losses.tolist()
+            }
+            json.dump(all_data, open("validation_losses.json", mode="w"))
 
         recalls = torch.tensor(recalls)
         N = recalls.shape[0]
@@ -125,8 +143,9 @@ def train_ce(num_epochs=30,
     loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
 
     try:
-        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                      gradient_clip)
+        pass
+        # training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
+        #               gradient_clip)
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
 
