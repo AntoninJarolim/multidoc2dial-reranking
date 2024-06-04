@@ -13,6 +13,7 @@ from utils import mrr_metric, transform_batch, pred_recall_metric
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info(f"device: {device}")
 start_t = time.time()
 
 
