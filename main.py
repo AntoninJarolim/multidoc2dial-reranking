@@ -21,6 +21,9 @@ console_handler.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 file_handler.setLevel(logging.INFO)
 
+# Log current time to be able to match .pt file with log file
+logger.info(f"Current time: {current_time}")
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train a cross encoder model.")
