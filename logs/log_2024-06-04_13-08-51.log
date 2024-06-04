@@ -1,0 +1,16 @@
+train: True
+num_epochs: 30
+stop_time: None
+load_model_path: None
+save_model_path: cross_encoder.pt
+bert_model_name: FacebookAI/xlm-roberta-base
+lr: 1e-05
+weight_decay: 0.1
+dropout_rate: 0.1
+label_smoothing: 0.0
+gradient_clip: 0
+compute_recall_at_k: False
+(2.85)------------- Training epoch 0 started -------------
+(140.60) Training batch 499/7151 loss: 0.7894853949546814
+(386.90) Epoch 0 on test dataset: MRR: 0.30; Recalls: tensor([0.1686, 0.4486, 0.6159]) Loss: 22283.33positive-loss: 464.57; negative-loss: 21818.76 
+(386.90) Epoch 0 on training dataset: loss: 3325.0291896909475; positive-loss: 2954.90; negative-loss: 370.13 

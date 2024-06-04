@@ -1,0 +1,15 @@
+Current time: 2024-06-04_16-59-48
+train: True
+num_epochs: 30
+stop_time: None
+load_model_path: None
+save_model_path: no_epoch.pt
+bert_model_name: FacebookAI/xlm-roberta-base
+lr: 1e-05
+weight_decay: 0.1
+dropout_rate: 0.1
+label_smoothing: 0
+gradient_clip: 0
+compute_recall_at_k: False
+Model saved to no_epoch.pt
+(1422.68) Final test on test dataset!MRR: 0.03; Recalls: tensor([0.0026, 0.0215, 0.0449]) Loss: 7767.35positive-loss: 1658.72; negative-loss: 6108.63 
