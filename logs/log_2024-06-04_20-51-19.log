@@ -1,0 +1,33 @@
+Current time: 2024-06-04_20-51-19
+train: True
+num_epochs: 1
+stop_time: None
+load_model_path: None
+save_model_path: ce_ls_1.pt
+bert_model_name: FacebookAI/xlm-roberta-base
+lr: 1e-05
+weight_decay: 0.1
+dropout_rate: 0.1
+label_smoothing: 0.1
+gradient_clip: 0
+compute_recall_at_k: False
+(2.81)------------- Training epoch 0 started -------------
+(241.90) Epoch 0 on test dataset: MRR: 0.11; Recalls: tensor([0.0286, 0.1471, 0.2826]) Loss: 9857.97positive-loss: 1110.62; negative-loss: 8747.35 
+(242.20) Training batch 0/7151 loss: 1.5241596698760986
+(382.71) Training batch 500/7151 loss: 1.1291409730911255
+(523.63) Training batch 1000/7151 loss: 1.2577298879623413
+(664.64) Training batch 1500/7151 loss: 1.1001797914505005
+(805.75) Training batch 2000/7151 loss: 1.402068018913269
+(947.00) Training batch 2500/7151 loss: 1.4344605207443237
+(1088.26) Training batch 3000/7151 loss: 1.0577023029327393
+(1229.52) Training batch 3500/7151 loss: 1.072080135345459
+(1370.78) Training batch 4000/7151 loss: 1.2208476066589355
+(1511.98) Training batch 4500/7151 loss: 1.153149962425232
+(1653.28) Training batch 5000/7151 loss: 1.0759327411651611
+(1794.61) Training batch 5500/7151 loss: 1.0186744928359985
+(1935.88) Training batch 6000/7151 loss: 0.9854481220245361
+(2077.13) Training batch 6500/7151 loss: 1.5137323141098022
+(2218.47) Training batch 7000/7151 loss: 1.312703251838684
+(2260.71) Epoch 0 on training dataset: loss: 29128.994298398495; positive-loss: 21433.21; negative-loss: 7695.78 
+Model saved to ce_ls_1.pt
+(3708.12) Final test on test dataset!MRR: 0.46; Recalls: tensor([0.3385, 0.5944, 0.6628]) Loss: 6007.86positive-loss: 888.68; negative-loss: 5119.18 

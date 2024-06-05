@@ -1,0 +1,16 @@
+Current time: 2024-06-05_14-34-44
+train: True
+num_epochs: 30
+stop_time: None
+load_model_path: None
+save_model_path: ms-marco.pt
+bert_model_name: cross-encoder/ms-marco-MiniLM-L-6-v2
+lr: 1e-05
+weight_decay: 0.1
+dropout_rate: 0.1
+label_smoothing: 0
+gradient_clip: 0
+compute_recall_at_k: False
+(4.19)------------- Training epoch 0 started -------------
+Early stopping by user Ctrl+C interaction.
+Model saved to ms-marco.pt
