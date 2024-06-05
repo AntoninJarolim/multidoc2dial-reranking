@@ -39,6 +39,9 @@ class MD2DDataset(IterableDataset):
         self.offset = 0
 
     def preprocess_file(self, tokenizer, data_path):
+        with open(data_path, 'r') as infile:
+            total_lines = sum(1 for _ in infile)
+
         logger.info(f"Preprocessing data with {self.tokenizer_name} tokenizer.")
         with open(data_path, 'r') as infile, jsonlines.open(self.preprocessed_f, 'w') as outfile:
             for i, line in enumerate(infile):
@@ -53,7 +56,7 @@ class MD2DDataset(IterableDataset):
                     outfile.write(obj)
 
                 if i % 1000 == 0:
-                    print(f"{i}")
+                    print(f"Preprocessed {i}/{total_lines} lines.")
 
     def preprocess_example(self, obj, tokenizer):
         pair = break_to_pair(obj['x'])
