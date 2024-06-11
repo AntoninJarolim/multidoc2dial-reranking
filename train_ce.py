@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -15,6 +16,23 @@ logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"device: {device}")
 start_t = time.time()
+
+
+@dataclass
+class EvaluationMetrics:
+    average_mrr: float
+    sum_recalls: torch.Tensor
+    loss_total: float
+    loss_negative: float
+    loss_positive: float
+
+    def log(self, epoch, dataset_name):
+        logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on {dataset_name} dataset: "
+                    f"MRR: {self.average_mrr:0.2f}; "
+                    f"Recalls: {self.sum_recalls} "
+                    f"Loss: {self.loss_total:0.2f}"
+                    f"positive-loss: {self.loss_positive:0.2f}; "
+                    f"negative-loss: {self.loss_negative:0.2f} ")
 
 
 class CrossEncoder(torch.nn.Module):
@@ -53,7 +71,7 @@ class CrossEncoder(torch.nn.Module):
         return cls_features
 
     @torch.no_grad()
-    def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True):
+    def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True) -> EvaluationMetrics:
         rr_total = 0
         loss_negative, loss_positive = 0, 0
         recalls = []
@@ -98,7 +116,7 @@ class CrossEncoder(torch.nn.Module):
         average_mrr = rr_total / num_batches if num_batches > 0 else 0
 
         loss_total = loss_negative + loss_positive
-        return average_mrr, sum_recalls, loss_total, loss_negative, loss_positive
+        return EvaluationMetrics(average_mrr, sum_recalls, loss_total, loss_negative, loss_positive)
 
     def process_large_batch(self, batch, max_sub_batch_size):
         # Split the batch into smaller sub-batches
@@ -164,15 +182,10 @@ def train_ce(num_epochs=30,
         test_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_test.jsonl',
                                    bert_model_name)
         test_loader = DataLoader(test_dataset, batch_size=1)
-        average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader,
-                                                                                          loss_fn,
-                                                                                          save_all_losses=True)
-        logger.info(f"({time.time() - start_t:0.2f}) Final test on test dataset!"
-                    f"MRR: {average_mrr:0.2f}; "
-                    f"Recalls: {sum_recalls} "
-                    f"Loss: {total_loss:0.2f}"
-                    f"positive-loss: {pos_loss:0.2f}; "
-                    f"negative-loss: {neg_loss:0.2f} ")
+        evaluation = cross_encoder.evaluate(test_loader,
+                                            loss_fn,
+                                            save_all_losses=True)
+        evaluation.log(num_epochs, "test")
 
 
 def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
@@ -195,25 +208,10 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
     # val_loader = DataLoader(val_dataset, batch_size=test_batch_size)
 
+    total_loss, loss_positive, loss_negative, gradient_steps = 0, 0, 0, 0
     for epoch in range(num_epochs):
         logger.info(f"({time.time() - start_t:0.2f})------------- Training epoch {epoch} started -------------")
 
-        # TESTING - MRR
-        cross_encoder.eval()
-        with torch.no_grad():
-            average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader, loss_fn,
-                                                                                              take_n=32,
-                                                                                              save_all_losses=False)
-            logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on test dataset: "
-                        f"MRR: {average_mrr:0.2f}; "
-                        f"Recalls: {sum_recalls} "
-                        f"Loss: {total_loss:0.2f}"
-                        f"positive-loss: {pos_loss:0.2f}; "
-                        f"negative-loss: {neg_loss:0.2f} ")
-
-        # training
-        total_loss, loss_positive, loss_negative = 0, 0, 0
-        cross_encoder.train()
         for i, batch in enumerate(train_loader):
             batch = {k: v.to(device) for k, v in batch.items()}
 
@@ -226,19 +224,28 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
             if gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm(cross_encoder.parameters(), gradient_clip)
             optimizer.step()
-            train_batch_loss = loss.item()
-
-            if i % 500 == 0:
-                logger.info(
-                    f'({time.time() - start_t:0.2f}) Training batch {i}/{len(train_loader)} loss: {train_batch_loss}')
-            total_loss += train_batch_loss
+            total_loss += loss.item()
 
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
 
-        logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on training dataset: "
-                    f"loss: {loss_positive + loss_negative}; "
-                    f"positive-loss: {loss_positive:0.2f}; "
-                    f"negative-loss: {loss_negative:0.2f} ")
+            # TESTING each x gradient steps
+            if gradient_steps % 500 == 0:
+                cross_encoder.eval()
+                with torch.no_grad():
+                    evaluation = cross_encoder.evaluate(test_loader, loss_fn,
+                                                        take_n=32,
+                                                        save_all_losses=False)
+                    evaluation.log(epoch, "test")
+
+                logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on training dataset: "
+                            f"loss: {loss_positive + loss_negative}; "
+                            f"positive-loss: {loss_positive:0.2f}; "
+                            f"negative-loss: {loss_negative:0.2f} ")
+
+                total_loss, loss_positive, loss_negative = 0, 0, 0
+                cross_encoder.train()
+
+            gradient_steps += i
 
         if stop_time is not None and time.time() - start_t > stop_time:
             break
