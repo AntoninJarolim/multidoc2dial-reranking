@@ -26,6 +26,9 @@ class MD2DDataset(IterableDataset):
         self.tokenizer_name = tokenizer_name.replace("/", "_")
 
         self.preprocessed_f_handle = None
+
+        # computes tokenized json files from path e.g.'data/DPR_pairs/DPR_pairs_test.jsonl'
+        # check if data_path json file was tokenized before
         self.preprocessed_f = f"data/{self.tokenizer_name}/{data_path.split('/')[-1]}"
         if not os.path.exists(self.preprocessed_f) or retokenize:
             os.makedirs(os.path.dirname(self.preprocessed_f), exist_ok=True)

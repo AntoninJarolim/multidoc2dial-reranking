@@ -3,11 +3,10 @@ import logging
 import time
 
 import torch
-import torch.nn.init as init
 from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForMaskedLM
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 from md2d_dataset import MD2DDataset
 from utils import mrr_metric, transform_batch, pred_recall_metric
@@ -21,14 +20,20 @@ start_t = time.time()
 class CrossEncoder(torch.nn.Module):
     def __init__(self, bert_model_name, dropout_rate=0.1):
         super(CrossEncoder, self).__init__()
+        m = AutoModelForSequenceClassification.from_pretrained(bert_model_name)
+        self.bert_model = m.bert
 
-        self.bert_model = AutoModelForMaskedLM.from_pretrained(bert_model_name)
-        self.linear = nn.Linear(768, 1)
         self.dropout = nn.Dropout(dropout_rate)
-
-        init.xavier_uniform_(self.linear.weight)
-        if self.linear.bias is not None:
-            init.zeros_(self.linear.bias)
+        self.linear = nn.Linear(384, 1)
+        # Try loading linear layer from model
+        try:
+            self.linear.weight = m.classifier.weight
+            self.linear.bias = m.classifier.bias
+        except Exception:
+            pass
+            # init.xavier_uniform_(self.linear.weight)
+            # if self.linear.bias is not None:
+            #     init.zeros_(self.linear.bias)
 
     def forward(self, input_ids, attention_mask):
         cls_features = self.get_cls_features(input_ids, attention_mask)
@@ -47,6 +52,7 @@ class CrossEncoder(torch.nn.Module):
         cls_features = last_hidden_state[:, 0, :]
         return cls_features
 
+    @torch.no_grad()
     def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True):
         rr_total = 0
         loss_negative, loss_positive = 0, 0
@@ -82,7 +88,7 @@ class CrossEncoder(torch.nn.Module):
                 'labels': labels.tolist(),
                 'losses': losses.tolist()
             }
-            json.dump(all_data, open("validation_losses.json", mode="w"))
+            json.dump(all_data, open("validation_losses_ls1.json", mode="w"))
 
         recalls = torch.tensor(recalls)
         N = recalls.shape[0]
@@ -124,6 +130,7 @@ def train_ce(num_epochs=30,
              load_model_path=None,
              save_model_path="cross_encoder.pt",
              bert_model_name="FacebookAI/xlm-roberta-base",
+             train_data_path='data/DPR_pairs/DPR_pairs_train.jsonl',
              lr=1e-5,
              weight_decay=1e-1,
              dropout_rate=0.1,
@@ -139,13 +146,13 @@ def train_ce(num_epochs=30,
         load_model(cross_encoder, load_model_path)
     cross_encoder.to(device)
 
-    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
-    loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
+    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr)  # , weight_decay=weight_decay)
+    loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2))
 
     try:
         pass
-        # training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-        #               gradient_clip)
+        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
+                      gradient_clip, train_data_path)
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
 
@@ -157,7 +164,9 @@ def train_ce(num_epochs=30,
         test_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_test.jsonl',
                                    bert_model_name)
         test_loader = DataLoader(test_dataset, batch_size=1)
-        average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader, loss_fn)
+        average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader,
+                                                                                          loss_fn,
+                                                                                          save_all_losses=True)
         logger.info(f"({time.time() - start_t:0.2f}) Final test on test dataset!"
                     f"MRR: {average_mrr:0.2f}; "
                     f"Recalls: {sum_recalls} "
@@ -167,8 +176,8 @@ def train_ce(num_epochs=30,
 
 
 def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                  gradient_clip):
-    train_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_train.jsonl',
+                  gradient_clip, train_data_path):
+    train_dataset = MD2DDataset(train_data_path,
                                 bert_model_name,
                                 label_smoothing=label_smoothing,
                                 shuffle=False)
@@ -193,7 +202,8 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
         cross_encoder.eval()
         with torch.no_grad():
             average_mrr, sum_recalls, total_loss, pos_loss, neg_loss = cross_encoder.evaluate(test_loader, loss_fn,
-                                                                                              take_n=32)
+                                                                                              take_n=32,
+                                                                                              save_all_losses=False)
             logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch} on test dataset: "
                         f"MRR: {average_mrr:0.2f}; "
                         f"Recalls: {sum_recalls} "
@@ -235,7 +245,13 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
 
 
 def separate_loss(batch, loss_fn, pred, mask_label):
-    mask = (batch['label'] == mask_label).flatten()
+    if mask_label == 0:
+        mask = (batch['label'] < 0.5).flatten()
+    elif mask_label == 1:
+        mask = (batch['label'] >= 0.5).flatten()
+    else:
+        raise AssertionError("mask_label must be either 0 or 1.")
+
     mask_loss = 0
     if mask.sum() > 0:  # Check if there are samples
         pred_mask = pred[mask]
@@ -251,4 +267,22 @@ def separate_losses(batch, loss_fn, pred, loss_negative, loss_positive):
 
 
 if __name__ == "__main__":
-    train_ce()
+    import torch
+
+    model = AutoModelForSequenceClassification.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    tokenizer = AutoTokenizer.from_pretrained('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+    features = tokenizer(['How many people live in Berlin?', 'How many people live in Berlin?'], [
+        'Berlin has a population of 3,520,031 registered inhabitants in an area of 891.82 square kilometers.',
+        'New York City is famous for the Metropolitan Museum of Art.'], padding=True, truncation=True,
+                         return_tensors="pt")
+
+    bert_model_name = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+    cross_encoder = CrossEncoder(bert_model_name)
+
+    model.eval()
+    with torch.no_grad():
+        scores = model(**features).logits
+        print(scores)
+
+    # train_ce()

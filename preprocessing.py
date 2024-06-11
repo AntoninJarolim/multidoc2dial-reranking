@@ -6,6 +6,9 @@ import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+DPR_SAMPLING_FROM = 50
+DPR_SAMPLING_TO = 60
+
 
 def write_test_samples(dpr_res, writer):
     q = dpr_res["question"].replace("[SEP]", "")
@@ -26,7 +29,7 @@ def write_train_samples(dpr_res, writer):
         "x": f"{q}[SEP]{pos_passage}",
         "label": 1
     })
-    for neg_psg in dpr_res["DPR_result"][10:20]:
+    for neg_psg in dpr_res["DPR_result"][DPR_SAMPLING_FROM:DPR_SAMPLING_TO]:
         writer.write({
             "x": f"{q}[SEP]{neg_psg['text']}",
             "label": 0
@@ -38,7 +41,10 @@ def create_train_pairs(split):
     with open(f'data/DPR/DPR_{split}.json', mode="r") as f:
         data = json.load(f)
 
-    with jsonlines.open(f'data/DPR_pairs/DPR_pairs_{split}.jsonl', mode="w") as writer:
+    out_file = f'data/DPR_pairs/DPR_pairs_{split}_{DPR_SAMPLING_FROM}-{DPR_SAMPLING_TO}.json'
+    print(f"Outputting train data (sampling: <{DPR_SAMPLING_FROM}-{DPR_SAMPLING_TO}>) to: "
+          f"{out_file}")
+    with jsonlines.open(out_file, mode="w") as writer:
         for i, d in enumerate(data):
             if train_split:
                 write_train_samples(d, writer)
