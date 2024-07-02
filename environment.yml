@@ -1,4 +1,4 @@
-name: base
+name: md2d-fresh
 channels:
   - defaults
 dependencies:
@@ -12,12 +12,8 @@ dependencies:
   - aiosignal=1.2.0=pyhd3eb1b0_0
   - alabaster=0.7.12=pyhd3eb1b0_0
   - altair=5.0.1=py311h06a4308_0
-  - anaconda-anon-usage=0.4.3=py311hfc0e8ea_100
   - anaconda-catalogs=0.2.0=py311h06a4308_0
-  - anaconda-client=1.12.3=py311h06a4308_0
   - anaconda-cloud-auth=0.1.4=py311h06a4308_0
-  - anaconda-navigator=2.5.2=py311h06a4308_0
-  - anaconda-project=0.11.1=py311h06a4308_0
   - anyio=4.2.0=py311h06a4308_0
   - aom=3.6.0=h6a678d5_0
   - appdirs=1.4.4=pyhd3eb1b0_0
@@ -86,16 +82,10 @@ dependencies:
   - colorama=0.4.6=py311h06a4308_0
   - colorcet=3.0.1=py311h06a4308_0
   - comm=0.1.2=py311h06a4308_0
-  - conda=24.1.2=py311h06a4308_0
-  - conda-build=24.1.2=py311h06a4308_0
   - conda-content-trust=0.2.0=py311h06a4308_0
-  - conda-index=0.4.0=pyhd3eb1b0_0
-  - conda-libmamba-solver=24.1.0=pyhd3eb1b0_0
   - conda-pack=0.6.0=pyhd3eb1b0_0
   - conda-package-handling=2.2.0=py311h06a4308_0
   - conda-package-streaming=0.9.0=py311h06a4308_0
-  - conda-repo-cli=1.0.75=py311h06a4308_0
-  - conda-token=0.4.0=pyhd3eb1b0_0
   - conda-verify=3.4.2=py_1
   - constantly=23.10.4=py311h06a4308_0
   - contourpy=1.2.0=py311hdb19cb5_0
@@ -289,7 +279,6 @@ dependencies:
   - mypy=1.8.0=py311h5eee18b_0
   - mypy_extensions=1.0.0=py311h06a4308_0
   - mysql=5.7.24=h721c034_2
-  - navigator-updater=0.4.0=py311h06a4308_1
   - nbclient=0.8.0=py311h06a4308_0
   - nbconvert=7.10.0=py311h06a4308_0
   - nbformat=5.9.2=py311h06a4308_0
@@ -517,7 +506,10 @@ dependencies:
   - zstandard=0.19.0=py311h5eee18b_0
   - zstd=1.5.5=hc292b87_0
   - pip:
+      - absl-py==2.1.0
+      - grpcio==1.64.1
       - huggingface-hub==0.22.2
+      - hyperopt==0.2.7
       - jsonlines==4.0.0
       - nvidia-cublas-cu11==11.11.3.6
       - nvidia-cuda-cupti-cu11==11.8.87
@@ -530,12 +522,16 @@ dependencies:
       - nvidia-cusparse-cu11==11.7.5.86
       - nvidia-nccl-cu11==2.20.5
       - nvidia-nvtx-cu11==11.8.86
+      - py4j==0.10.9.7
       - rank-bm25==0.2.2
       - safetensors==0.4.2
+      - sentence-transformers==3.0.1
+      - tensorboard==2.17.0
+      - tensorboard-data-server==0.7.2
       - tokenizers==0.15.2
       - torch==2.3.0+cu118
       - torchaudio==2.3.0+cu118
       - torchvision==0.18.0+cu118
       - transformers==4.39.3
       - triton==2.3.0
-prefix: /mnt/data/xjarol06_firllm/anaconda3
+prefix: /mnt/data/xjarol06_firllm/anaconda3/envs/md2d-fresh
