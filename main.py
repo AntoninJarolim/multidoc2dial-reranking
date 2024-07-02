@@ -44,8 +44,10 @@ if __name__ == "__main__":
                         help="Path to save the model to")
     parser.add_argument("--bert_model_name", type=str, default="FacebookAI/xlm-roberta-base",
                         help="Name of the BERT model")
-    parser.add_argument("--train_data_path", type=str, default="DPR_pairs_test.jsonl",
+    parser.add_argument("--train_data_path", type=str, default="DPR_pairs_train_50-60.json",
                         help="Train data filename jsonl, will be appended to 'data/DPR_pairs/'")
+    parser.add_argument("--test_data_path", type=str, default="DPR_pairs_test.jsonl",
+                        help="Test data filename jsonl, will be appended to 'data/DPR_pairs/'")
     parser.add_argument("--lr", type=float, default=1e-5,
                         help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-2,
@@ -56,6 +58,8 @@ if __name__ == "__main__":
                         help="Label smoothing rate (float between 0 and 1), default=0")
     parser.add_argument("--gradient_clip", type=float, default=0,
                         help="Gradient clipping `max_norm` param (float between 0 and 1), default=0")
+    parser.add_argument("--batch_size", type=int, default=64,
+                        help="Batch size for training")
 
     parser.add_argument("--compute_recall_at_k", default=False, action='store_true')
 
@@ -71,6 +75,7 @@ if __name__ == "__main__":
 
     if args.train:
         args.train_data_path = "data/DPR_pairs/" + args.train_data_path
+        args.test_data_path = "data/DPR_pairs/" + args.test_data_path
 
         for key, value in vars(args).items():
             logger.info(f"{key}: {value}")
@@ -80,15 +85,18 @@ if __name__ == "__main__":
                      save_model_path=args.save_model_path,
                      bert_model_name=args.bert_model_name,
                      train_data_path=args.train_data_path,
+                     test_data_path=args.test_data_path,
                      lr=args.lr,
                      weight_decay=args.weight_decay,
                      dropout_rate=args.dropout_rate,
                      stop_time=args.stop_time,
                      label_smoothing=args.label_smoothing,
-                     gradient_clip=args.gradient_clip)
+                     gradient_clip=args.gradient_clip,
+                     batch_size=args.batch_size)
 
     if args.compute_recall_at_k:
-        ks = [1, 5, 10, 50, 200]
+        ks = [1, 5, 10, 50, 200]clogs
+
         paths = 'data/DPR_pairs/DPR_pairs_test.jsonl', 'data/DPR_pairs/DPR_pairs_validation.jsonl'
         for p in paths:
             print(f"Computing recall for {p}.")

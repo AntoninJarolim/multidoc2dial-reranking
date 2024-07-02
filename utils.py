@@ -7,6 +7,14 @@ import torch
 logger = logging.getLogger('main')
 
 
+def conv_to_torch(pred, labels):
+    if type(pred) is not torch.Tensor:
+        pred = torch.tensor(pred)
+    if type(labels) is not torch.Tensor:
+        labels = torch.tensor(labels)
+    return pred, labels
+
+
 def mrr_metric(preds, labels):
     """
     Compute Mean Reciprocal Rank (MRR).
@@ -23,6 +31,7 @@ def mrr_metric(preds, labels):
     if sum(labels) == 0:
         return 0
 
+    preds, labels = conv_to_torch(preds, labels)
     sorted_indices = torch.argsort(preds, descending=True)
     sorted_labels = labels[sorted_indices]
     rank = np.argwhere(sorted_labels.cpu()).flatten().item() + 1
@@ -42,6 +51,8 @@ def recall_metric(sorted_labels, ks):
 
 
 def pred_recall_metric(pred, labels, ks):
+    pred, labels = conv_to_torch(pred, labels)
+
     # skip computation if all labels are 0
     if sum(labels) == 0:
         return torch.zeros(len(ks))
@@ -73,10 +84,12 @@ def transform_batch(batch, take_n=0):
     labels = torch.vstack([item['label'] for item in batch]).flatten()
     in_ids = torch.vstack([item['in_ids'] for item in batch])
     att_masks = torch.vstack([item['att_mask'] for item in batch])
+    tt_ids = torch.vstack([item['tt_ids'] for item in batch])
 
     # Combine into a dictionary as expected by your code
     return {
         'label': labels,
         'in_ids': in_ids,
-        'att_mask': att_masks
+        'att_mask': att_masks,
+        'tt_ids': tt_ids
     }

@@ -63,10 +63,10 @@ class MD2DDataset(IterableDataset):
 
     def preprocess_example(self, obj, tokenizer):
         pair = break_to_pair(obj['x'])
-        tokenized = tokenizer([pair], return_tensors="pt", padding="max_length", truncation=True,
-                              max_length=128)
+        tokenized = tokenizer(pair[0], pair[1], return_tensors="pt", padding="max_length", truncation=True, )
         obj['in_ids'] = tokenized["input_ids"][0].tolist()
         obj['att_mask'] = tokenized["attention_mask"][0].tolist()
+        obj['tt_ids'] = tokenized["token_type_ids"][0].tolist()
         del obj['x']
         return obj
 
@@ -136,6 +136,7 @@ class MD2DDataset(IterableDataset):
     def transform_example(self, example):
         example['in_ids'] = torch.tensor(example['in_ids'])
         example['att_mask'] = torch.tensor(example['att_mask'])
+        example['tt_ids'] = torch.tensor(example['tt_ids'])
 
         # Label smoothing for two classes
         if self.label_smoothing != 0:
