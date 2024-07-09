@@ -532,9 +532,9 @@ dependencies:
       - tensorboard==2.17.0
       - tensorboard-data-server==0.7.2
       - tokenizers==0.15.2
-      - torch==2.3.0+cu118
-      - torchaudio==2.3.0+cu118
-      - torchvision==0.18.0+cu118
+      - torch==2.3.0
+      - torchaudio==2.3.0
+      - torchvision==0.18.0
       - transformers==4.39.3
       - triton==2.3.0
 prefix: /mnt/data/xjarol06_firllm/anaconda3/envs/md2d-fresh

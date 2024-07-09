@@ -13,7 +13,7 @@ install_dependencies() {
     fi
 
     # Initialize Conda
-    source /mnt/data/xjarol06_firllm/anaconda3/etc/profile.d/conda.sh
+    source /mnt/data/xjarol06_firllm/conda/etc/profile.d/conda.sh
 
     # Create and activate Conda environment
     echo "Creating Conda environment from environment.yml..."
@@ -30,7 +30,12 @@ if [[ "$1" == "--install" ]]; then
     install_dependencies
 fi
 
-mkdir data
+DIR="data"
+if [ ! -d "$DIR" ]; then
+    echo "Creating directory $DIR"
+    mkdir -p "$DIR"
+fi
+
 # Copy data if not already present
 if [ ! -d "data/naver_trecdl22-crossencoder-debertav3" ]; then
     cp -r ~/md2d_data/naver_trecdl22-crossencoder-debertav3 data/naver_trecdl22-crossencoder-debertav3
