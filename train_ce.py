@@ -4,11 +4,12 @@ import time
 from dataclasses import dataclass
 
 import torch
-from torch import nn
+from torch import nn, cuda
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, BertForSequenceClassification, DebertaV2Model, BertModel
 from transformers import AutoTokenizer
 from transformers import DebertaV2ForSequenceClassification
@@ -138,7 +139,7 @@ class CrossEncoder(torch.nn.Module):
         bce_loss = nn.BCELoss()
         sm_loss_sum = 0
 
-        for i, batch in enumerate(data_loader):
+        for i, batch in tqdm(enumerate(data_loader), total=len(data_loader), desc="Evaluation"):
             batch = transform_batch(batch, take_n)
             batch = {k: v.to(device) for k, v in batch.items()}
             if take_n == 0:
@@ -262,6 +263,8 @@ def train_ce(num_epochs=30,
         load_model(cross_encoder, load_model_path)
     cross_encoder.to(device)
 
+    print(cuda.memory_summary())
+
     optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
     loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(positive_weight))
 
@@ -330,6 +333,7 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
 
             # Training step
             batch = {k: v.to(device) for k, v in batch.items()}
+            print(cuda.memory_summary())
 
             optimizer.zero_grad()
 
