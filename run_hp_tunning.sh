@@ -1,4 +1,4 @@
-#!/bi/nbash
+#!/bin/bash
 rt LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export PYTHONPATH=$(pwd) # assuming you are in root repository folder
 
