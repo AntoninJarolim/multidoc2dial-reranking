@@ -7,6 +7,7 @@ import random as rnd
 import jsonlines
 import torch
 from torch.utils.data import IterableDataset, DataLoader
+from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class MD2DDataset(IterableDataset):
         if not os.path.exists(self.preprocessed_f) or retokenize:
             os.makedirs(os.path.dirname(self.preprocessed_f), exist_ok=True)
             tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+            model = AutoModelForMaskedLM.from_pretrained(tokenizer_name)
+            self.model_max_length = model.config.max_position_embeddings
             self.preprocess_file(tokenizer, data_path)
 
         # data loading/iterating management
@@ -47,7 +50,7 @@ class MD2DDataset(IterableDataset):
 
         logger.info(f"Preprocessing data with {self.tokenizer_name} tokenizer.")
         with open(data_path, 'r') as infile, jsonlines.open(self.preprocessed_f, 'w') as outfile:
-            for i, line in enumerate(infile):
+            for i, line in tqdm(enumerate(infile), total=total_lines, desc="Preprocessing jsonl file."):
                 obj = json.loads(line.strip())
                 if type(obj) is list:
                     tokenized = []
@@ -58,12 +61,11 @@ class MD2DDataset(IterableDataset):
                     self.preprocess_example(obj, tokenizer)
                     outfile.write(obj)
 
-                if i % 1000 == 0:
-                    print(f"Preprocessed {i}/{total_lines} lines.")
-
     def preprocess_example(self, obj, tokenizer):
         pair = break_to_pair(obj['x'])
-        tokenized = tokenizer(pair[0], pair[1], return_tensors="pt", padding="max_length", truncation=True, )
+        tokenized = tokenizer(pair[0], pair[1],
+                              return_tensors="pt", padding="max_length",
+                              truncation=True, max_length=self.model_max_length)
         obj['in_ids'] = tokenized["input_ids"][0].tolist()
         obj['att_mask'] = tokenized["attention_mask"][0].tolist()
         obj['tt_ids'] = tokenized["token_type_ids"][0].tolist()

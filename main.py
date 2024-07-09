@@ -13,7 +13,7 @@ def setup_logging(log_suffix=""):
     logger.setLevel(logging.INFO)
 
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    log_file = os.path.join('logs', f'log_{current_time}.log')
+    log_file = os.path.join('logs', f'log_{current_time}_{log_suffix}.log')
 
     file_handler = logging.FileHandler(log_file)
     console_handler = logging.StreamHandler()
@@ -33,32 +33,34 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a cross encoder model.")
 
     parser.add_argument("--train", default=False, action='store_true')
-    parser.add_argument("--num_epochs", type=int, default=30,
+    parser.add_argument("--num-epochs", type=int, default=30,
                         help="Number of epochs for training")
-    parser.add_argument("--stop_time", type=str, default=None,
+    parser.add_argument("--stop-time", type=str, default=None,
                         help="Number of seconds after which training on another epoch will not start."
                              "Hours are supported too, e.g. value '24h' should also work")
-    parser.add_argument("--load_model_path", type=str, default=None,
+    parser.add_argument("--load-model_path", type=str, default=None,
                         help="Path to load the model from")
-    parser.add_argument("--save_model_path", type=str, default="cross_encoder.pt",
+    parser.add_argument("--save-model-path", type=str, default="cross_encoder.pt",
                         help="Path to save the model to")
-    parser.add_argument("--bert_model_name", type=str, default="FacebookAI/xlm-roberta-base",
+    parser.add_argument("--bert-model-name", type=str, default="FacebookAI/xlm-roberta-base",
                         help="Name of the BERT model")
-    parser.add_argument("--train_data_path", type=str, default="DPR_pairs_train_50-60.json",
+    parser.add_argument("--train-data-path", type=str, default="DPR_pairs_train_50-60.json",
                         help="Train data filename jsonl, will be appended to 'data/DPR_pairs/'")
-    parser.add_argument("--test_data_path", type=str, default="DPR_pairs_test.jsonl",
+    parser.add_argument("--test-data-path", type=str, default="DPR_pairs_test.jsonl",
                         help="Test data filename jsonl, will be appended to 'data/DPR_pairs/'")
     parser.add_argument("--lr", type=float, default=1e-5,
                         help="Learning rate")
-    parser.add_argument("--weight_decay", type=float, default=1e-2,
+    parser.add_argument("--weight-decay", type=float, default=1e-2,
                         help="Weight decay")
-    parser.add_argument("--dropout_rate", type=float, default=0.1,
+    parser.add_argument("--positive-weight", type=float, default=2,
+                        help="Weight of positive class")
+    parser.add_argument("--dropout-rate", type=float, default=0.1,
                         help="Dropout rate")
-    parser.add_argument("--label_smoothing", type=float, default=0,
+    parser.add_argument("--label-smoothing", type=float, default=0,
                         help="Label smoothing rate (float between 0 and 1), default=0")
-    parser.add_argument("--gradient_clip", type=float, default=0,
+    parser.add_argument("--gradient-clip", type=float, default=0,
                         help="Gradient clipping `max_norm` param (float between 0 and 1), default=0")
-    parser.add_argument("--batch_size", type=int, default=64,
+    parser.add_argument("--batch-size", type=int, default=64,
                         help="Batch size for training")
 
     parser.add_argument("--compute_recall_at_k", default=False, action='store_true')
@@ -88,6 +90,7 @@ if __name__ == "__main__":
                      test_data_path=args.test_data_path,
                      lr=args.lr,
                      weight_decay=args.weight_decay,
+                     positive_weight=args.positive_weight,
                      dropout_rate=args.dropout_rate,
                      stop_time=args.stop_time,
                      label_smoothing=args.label_smoothing,
@@ -95,7 +98,7 @@ if __name__ == "__main__":
                      batch_size=args.batch_size)
 
     if args.compute_recall_at_k:
-        ks = [1, 5, 10, 50, 200]clogs
+        ks = [1, 5, 10, 50, 200]
 
         paths = 'data/DPR_pairs/DPR_pairs_test.jsonl', 'data/DPR_pairs/DPR_pairs_validation.jsonl'
         for p in paths:

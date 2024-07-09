@@ -6,9 +6,12 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, BertForSequenceClassification, DebertaV2Model, BertModel
+from transformers import AutoTokenizer
+from transformers import DebertaV2ForSequenceClassification
 
 from md2d_dataset import MD2DDataset
 from utils import mrr_metric, transform_batch, pred_recall_metric
@@ -30,7 +33,7 @@ class EvaluationMetrics:
     loss_positive: float
     softmax_loss_sum: float
 
-    def log(self, epoch, dataset_name, gs):
+    def log(self, epoch, dataset_name, gs, scheduler=None):
         logger.info(f"({time.time() - start_t:0.2f}) Epoch {epoch}; gs:{gs}; on {dataset_name} dataset: "
                     f"MRR: {self.average_mrr:0.2f}; "
                     f"Recalls: {self.sum_recalls}; "
@@ -57,29 +60,49 @@ class EvaluationMetrics:
         tb_writer.add_scalar(f"{dataset_name}/LossTotal", self.loss_total, gs)
         tb_writer.add_scalar(f"{dataset_name}/LossSoftMax", self.softmax_loss_sum, gs)
 
+        if scheduler is not None:
+            tb_writer.add_scalar(f"{dataset_name}/LR", scheduler.get_lr()[0], gs)
+
+
+class BestMetricTracker:
+    def __init__(self):
+        self.best_mrr = 0
+        self.best_mrr_epoch = -1
+        self.best_mrr_gs = -1
+
+    def step(self, evaluation: EvaluationMetrics, epoch, gs):
+        if evaluation.average_mrr > self.best_mrr:
+            self.best_mrr = evaluation.average_mrr
+            self.best_mrr_epoch = epoch
+            self.best_mrr_gs = gs
+
 
 class CrossEncoder(torch.nn.Module):
     def __init__(self, bert_model_name, dropout_rate=0.1):
         super(CrossEncoder, self).__init__()
-        m = AutoModelForSequenceClassification.from_pretrained(bert_model_name)
-        self.bert_model = m.bert
 
+        m = AutoModelForSequenceClassification.from_pretrained(bert_model_name)
+        if isinstance(m, DebertaV2ForSequenceClassification):
+            bert_model = m.deberta
+            hidden_size = m.config.hidden_size
+            self.pooler = m.pooler
+        else:
+            assert isinstance(m, BertForSequenceClassification)
+            bert_model = m.bert
+            hidden_size = m.config.hidden_size
+
+        # Model initialization
+        self.bert_model = bert_model
         self.dropout = nn.Dropout(dropout_rate)
-        self.linear = nn.Linear(384, 1)
-        # Try loading linear layer from model
-        try:
-            self.linear.weight = m.classifier.weight
-            self.linear.bias = m.classifier.bias
-        except Exception:
-            pass
-            # init.xavier_uniform_(self.linear.weight)
-            # if self.linear.bias is not None:
-            #     init.zeros_(self.linear.bias)
+        self.classifier = nn.Linear(hidden_size, 1)
+
+        self.classifier.weight = m.classifier.weight
+        self.classifier.bias = m.classifier.bias
 
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         cls_features = self.get_cls_features(input_ids, attention_mask, token_type_ids)
         cls_features = self.dropout(cls_features)
-        logits = self.linear(cls_features)
+        logits = self.classifier(cls_features)
         # Flatten [batch_size, 1] to [batch_size]
         return logits.flatten()
 
@@ -89,13 +112,15 @@ class CrossEncoder(torch.nn.Module):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             output_hidden_states=True)
-        hidden_states = outputs.hidden_states
-
-        # The last hidden state
-        last_hidden_state = hidden_states[-1]
-        # The [CLS] token is the first token of the last hidden state
-        cls_features = last_hidden_state[:, 0, :]
-        return outputs[1]
+        if isinstance(self.bert_model, DebertaV2Model):
+            # Deberta model doesnt do pooling automatically
+            encoder_layer = outputs[0]
+            pooled_output = self.pooler(encoder_layer)
+            return pooled_output
+        else:
+            assert isinstance(self.bert_model, BertModel)
+            # Bert model returns a tuple with the last hidden state and the pooler output
+            return outputs[1]
 
     @torch.no_grad()
     def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True) -> EvaluationMetrics:
@@ -174,6 +199,36 @@ class CrossEncoder(torch.nn.Module):
         return merged_preds
 
 
+class WarmupCosineAnnealingWarmRestarts(LRScheduler):
+    def __init__(self, optimizer, warmup_steps, T_0, T_mult=1, eta_min=0, last_epoch=-1):
+        self.warmup_steps = warmup_steps
+        self.T_0 = T_0
+        self.T_mult = T_mult
+        self.eta_min = eta_min
+        self.base_lrs = [group['lr'] for group in optimizer.param_groups]
+        self.cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=T_0, T_mult=T_mult, eta_min=eta_min, last_epoch=last_epoch
+        )
+        super(WarmupCosineAnnealingWarmRestarts, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_steps:
+            warmup_lr = [(base_lr - self.eta_min) * self.last_epoch / self.warmup_steps + self.eta_min for base_lr in
+                         self.base_lrs]
+            return warmup_lr
+        else:
+            return self.cosine_scheduler.get_lr()
+
+    def step(self, epoch=None):
+        if self.last_epoch < self.warmup_steps:
+            self.last_epoch += 1
+            warmup_lr = self.get_lr()
+            for param_group, lr in zip(self.optimizer.param_groups, warmup_lr):
+                param_group['lr'] = lr
+        else:
+            self.cosine_scheduler.step(epoch)
+
+
 def load_model(cross_encoder, load_path):
     cross_encoder.load_state_dict(torch.load(load_path))
     logger.info(f"Model loaded successfully from {load_path}")
@@ -182,18 +237,23 @@ def load_model(cross_encoder, load_path):
 def train_ce(num_epochs=30,
              load_model_path=None,
              save_model_path="cross_encoder.pt",
-             bert_model_name="FacebookAI/xlm-roberta-base",
+             bert_model_name="naver/trecdl22-crossencoder-debertav3",
              train_data_path='data/DPR_pairs/DPR_pairs_train.jsonl',
              test_data_path='data/DPR_pairs/DPR_pairs_test.jsonl',
              lr=1e-5,
              weight_decay=1e-1,
+             positive_weight=2,
              dropout_rate=0.1,
              optimizer=None,
              loss_fn=None,
              stop_time=None,
              label_smoothing=0,
              gradient_clip=0,
-             batch_size=128
+             batch_size=128,
+             warmup_percent=0.1,
+             nr_restarts=1,
+             lr_min=1e-7,
+             test_every="epoch",
              ):
     gradient_clip = None if gradient_clip == 0 else gradient_clip
 
@@ -202,32 +262,26 @@ def train_ce(num_epochs=30,
         load_model(cross_encoder, load_model_path)
     cross_encoder.to(device)
 
-    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr)  # , weight_decay=weight_decay)
-    loss_fn = loss_fn or nn.BCEWithLogitsLoss()  # pos_weight=torch.tensor(2))
+    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
+    loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(positive_weight))
 
     try:
         pass
-        training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                      gradient_clip, train_data_path, batch_size, test_data_path)
+        best = training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
+                             gradient_clip, train_data_path, batch_size, test_data_path, warmup_percent, nr_restarts,
+                             lr_min, test_every)
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
+        best = None
 
     torch.save(cross_encoder.state_dict(), save_model_path)
     logger.info(f"Model saved to {save_model_path}")
-
-    cross_encoder.eval()
-    with torch.no_grad():
-        test_dataset = MD2DDataset(test_data_path,
-                                   bert_model_name)
-        test_loader = DataLoader(test_dataset, batch_size=1)
-        evaluation = cross_encoder.evaluate(test_loader,
-                                            loss_fn,
-                                            save_all_losses=True)
-        # evaluation.log(num_epochs, "test", 0)
+    return best
 
 
 def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                  gradient_clip, train_data_path, batch_size, test_data_path):
+                  gradient_clip, train_data_path, batch_size, test_data_path, warmup_percent, nr_restarts, lr_min,
+                  test_every):
     train_dataset = MD2DDataset(train_data_path,
                                 bert_model_name,
                                 label_smoothing=label_smoothing,
@@ -235,31 +289,43 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
 
     test_dataset = MD2DDataset(test_data_path,
                                bert_model_name)
-    # val_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_validation.jsonl',
-    #                           bert_model_name)
-
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
     # only for evaluation - there are 10 negative samples and 1 positive sample
     test_batch_size = 1
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
-    # val_loader = DataLoader(val_dataset, batch_size=test_batch_size)
 
-    # TEST_EVERY = len(train_loader)
-    TEST_EVERY = 500
-    logger.info(f"TEST_EVERY: {TEST_EVERY}")
+    # Scheduler initialization
+    steps_per_epoch = len(train_loader) * batch_size
+    total_steps = steps_per_epoch * num_epochs
+    warmup_percent = warmup_percent
+    warmup_steps = int(warmup_percent * total_steps)
+    annealing_steps = total_steps - warmup_steps
+    nr_restarts = nr_restarts
+    first_restart_t0 = annealing_steps // nr_restarts
+    lr_min = lr_min
+
+    scheduler = WarmupCosineAnnealingWarmRestarts(
+        optimizer, warmup_steps=warmup_steps, T_0=first_restart_t0, T_mult=1, eta_min=lr_min)
+
+    best_metric_tracker = BestMetricTracker()
+    if test_every == "epoch":
+        test_every = len(train_loader)
+
+    logger.info(f"TEST_EVERY: {test_every}")
     total_loss, loss_positive, loss_negative, gradient_steps = 0, 0, 0, 0
     for epoch in range(num_epochs):
         logger.info(f"({time.time() - start_t:0.2f})------------- Training epoch {epoch} started -------------")
 
         for i, batch in enumerate(train_loader):
             # TESTING each x gradient steps
-            if gradient_steps % TEST_EVERY == 0:
+            if gradient_steps % test_every == 0:
                 cross_encoder.eval()
                 with torch.no_grad():
                     evaluation = cross_encoder.evaluate(test_loader, loss_fn,
                                                         save_all_losses=False)
-                    evaluation.log(epoch, "test", gradient_steps)
+                    evaluation.log(epoch, "test", gradient_steps, scheduler)
+                    best_metric_tracker.step(evaluation, epoch, gradient_steps)
                 cross_encoder.train()
 
             # Training step
@@ -274,6 +340,7 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
             if gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm_(cross_encoder.parameters(), gradient_clip)
             optimizer.step()
+            scheduler.step()
             total_loss += loss.item()
 
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
@@ -295,7 +362,12 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
         if stop_time is not None and time.time() - start_t > stop_time:
             break
 
+    # val_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_validation.jsonl',
+    #                           bert_model_name)
+    # val_loader = DataLoader(val_dataset, batch_size=test_batch_size)
+
     tb_writer.close()
+    return best_metric_tracker
 
 
 def separate_loss(batch, loss_fn, pred, mask_label):
