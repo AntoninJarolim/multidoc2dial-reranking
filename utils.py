@@ -106,7 +106,7 @@ def calc_physical_batch_size(batch_size, gpu_batches=None):
     assert batch_size > 0, "Batch size should greater than 0"
 
     default_gpu_batches = {
-        "NVIDIA GeForce RTX 2080 Ti": 2,
+        "NVIDIA GeForce RTX 2080 Ti": 1,
         "NVIDIA GeForce RTX 3090": 4,
         "NVIDIA RTX A5000": 4,
     }

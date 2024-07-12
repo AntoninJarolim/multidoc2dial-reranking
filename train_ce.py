@@ -399,6 +399,7 @@ def training_loop(cross_encoder,
             batch = {k: v.to(device) for k, v in batch.items()}
             pred = cross_encoder(input_ids=batch['in_ids'], attention_mask=batch['att_mask'])
             loss = loss_fn(pred, batch['label'])
+            loss = loss / gradient_accumulation_steps
             loss.backward()
 
             if gradient_clip is not None:

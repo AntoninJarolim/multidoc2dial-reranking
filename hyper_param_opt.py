@@ -97,7 +97,7 @@ def run_hyperparam_opt():
             "positive_weight": hp.uniform("positive_weight", low=1, high=8),
             "lr": hp.loguniform("lr", low=np.log(1e-6), high=np.log(2e-4)),
             "lr_min": hp.loguniform("lr_min", low=np.log(1e-7), high=np.log(1e-6)),
-            "batch_size": hp.choice("batch_size", np.array([16, 32, 64, 128], dtype=object)),
+            "batch_size": hp.choice("batch_size", np.array([16, 32, 64, 128, 256, 512], dtype=object)),
             "warmup_percent": hp.uniform("warmup_percent", low=0.05, high=0.2),
             "nr_restarts": hp.choice("nr_restarts", np.array([1, 2, 3, 4, 5], dtype=object)),
             "gradient_clip": hp.choice("gradient_clip", np.array([0, 1, 2], dtype=object)),
