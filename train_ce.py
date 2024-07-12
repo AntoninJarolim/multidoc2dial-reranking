@@ -361,6 +361,7 @@ def training_loop(cross_encoder,
                   ):
     # Train data loader
     batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
+    logger.info(f"batch_size: {batch_size}\ngradient_accumulation_steps: {gradient_accumulation_steps}")
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
     # Test data loader

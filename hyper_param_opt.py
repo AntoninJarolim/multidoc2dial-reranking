@@ -34,7 +34,7 @@ def obj(hpt_config):
         "train_data_path": "data/DPR_pairs/DPR_pairs_train_50-60.json",
         "test_data_path": "data/DPR_pairs/DPR_pairs_test.jsonl",
         "test_every": "epoch",
-        "save_model": True,
+        "dont_save_model": False,
         "evaluate_before_training": socket.gethostname() == SERVER.split(".")[0],
         "evaluation_take_n": 50,
     }
