@@ -10,18 +10,22 @@ logger = logging.getLogger('main')
 
 
 def setup_logging(log_suffix=""):
-    logger.setLevel(logging.INFO)
-
     current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     log_file = os.path.join('logs', f'log_{current_time}_{log_suffix}.log')
+
+    logger.propagate = False  # Prevent the log messages from being duplicated in the python console
+
+    # Remove all handlers associated with the logger object
+    logger.handlers.clear()
 
     file_handler = logging.FileHandler(log_file)
     console_handler = logging.StreamHandler()
 
     logger.addHandler(console_handler)
-    console_handler.setLevel(logging.INFO)
-
     logger.addHandler(file_handler)
+
+    logger.setLevel(logging.INFO)
+    console_handler.setLevel(logging.INFO)
     file_handler.setLevel(logging.INFO)
 
     # Log current time to be able to match .pt file with log file

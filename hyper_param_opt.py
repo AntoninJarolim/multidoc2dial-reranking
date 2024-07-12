@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import sys
@@ -12,7 +11,6 @@ import train_ce as tce
 from main import setup_logging
 
 logger = logging.getLogger('main')
-setup_logging("hyper_param_opt.log")
 SERVER = "pcknot6.fit.vutbr.cz"
 DB_ADDRESS = f"mongo://{SERVER}:1234/ce/jobs"
 DB_KEY = "trecdl22-crossencoder-debertav3"
@@ -35,12 +33,27 @@ def obj(hpt_config):
         "train_data_path": "data/DPR_pairs/DPR_pairs_train_50-60.json",
         "test_data_path": "data/DPR_pairs/DPR_pairs_test.jsonl",
         "test_every": "epoch",
+        "save_model": True
     }
-    config = {**fixed_config, **hpt_config}
-    logger.info("Running with config:")
-    logger.info(json.dumps(config, indent=4, sort_keys=True))
 
-    min_mrr = tce.train_ce(**config)
+    data_args = tce.TrainDataArgs(load_model_path=fixed_config["load_model_path"],
+                                  save_model_path=fixed_config["save_model_path"],
+                                  bert_model_name=fixed_config["bert_model_name"],
+                                  train_data_path=fixed_config["train_data_path"],
+                                  test_data_path=fixed_config["test_data_path"],
+                                  dont_save_model=fixed_config["save_model"],
+                                  )
+
+    train_args = tce.TrainHyperparameters(num_epochs=fixed_config["num_epochs"],
+                                          lr=hpt_config["lr"],
+                                          weight_decay=hpt_config["weight_decay"],
+                                          positive_weight=hpt_config["positive_weight"],
+                                          dropout_rate=hpt_config["dropout_rate"],
+                                          label_smoothing=hpt_config["label_smoothing"],
+                                          gradient_clip=hpt_config["gradient_clip"],
+                                          batch_size=hpt_config["batch_size"])
+
+    min_mrr = tce.train_ce(data_args, train_args)
     if min_mrr is None:
         result = {
             "status": STATUS_FAIL,
@@ -68,6 +81,8 @@ def obj(hpt_config):
 def run_hyperparam_opt():
     trials = MongoTrials(DB_ADDRESS, exp_key=DB_KEY)
     try:
+        # np arrays of ints to prevent hyperopt auto conversion to float
+        # ints of type object to make it json serializable
         space = {
             "label_smoothing": hp.uniform("label_smoothing", low=0.0, high=0.25),
             "dropout_rate": hp.uniform("dropout_rate", low=0.0, high=0.4),
@@ -75,15 +90,15 @@ def run_hyperparam_opt():
             "positive_weight": hp.uniform("positive_weight", low=1, high=8),
             "lr": hp.loguniform("lr", low=np.log(1e-6), high=np.log(2e-4)),
             "lr_min": hp.loguniform("lr_min", low=np.log(1e-7), high=np.log(1e-6)),
-            "batch_size": hp.choice("batch_size", [16, 32, 64, 128]),
+            "batch_size": hp.choice("batch_size", np.array([16, 32, 64, 128], dtype=object)),
             "warmup_percent": hp.uniform("warmup_percent", low=0.05, high=0.2),
-            "nr_restarts": hp.choice("nr_restarts", [1, 2, 3, 4, 5]),
-            "gradient_clip": hp.choice("gradient_clip", [0, 1, 2]),
+            "nr_restarts": hp.choice("nr_restarts", np.array([1, 2, 3, 4, 5], dtype=object)),
+            "gradient_clip": hp.choice("gradient_clip", np.array([0, 1, 2], dtype=object)),
         }
         best = fmin(obj, space, trials=trials, algo=tpe.suggest, max_evals=30)
         logger.info("#" * 20)
         logger.info(best)
-    except KeyboardInterrupt as e:
+    except KeyboardInterrupt:
         logger.info("INTERRUPTED")
         logger.info("#" * 20)
         logger.info(trials.argmin)

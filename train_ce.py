@@ -248,7 +248,7 @@ class WarmupCosineAnnealingWarmRestarts(LRScheduler):
 
 @dataclass
 class TrainDataArgs:
-    load_model_path: str = None
+    load_model_path: object = None
     save_model_path: str = "cross_encoder.pt"
     bert_model_name: str = "naver/trecdl22-crossencoder-debertav3"
     train_data_path: str = 'data/DPR_pairs/DPR_pairs_train.jsonl'
@@ -270,7 +270,7 @@ class TrainHyperparameters:
     dropout_rate: float = 0.1
     optimizer: object = None
     loss_fn: object = None
-    stop_time: int = None  # in seconds
+    stop_time: object = None  # in seconds
     label_smoothing: int = 0
     gradient_clip: float = None
     batch_size: int = 128
