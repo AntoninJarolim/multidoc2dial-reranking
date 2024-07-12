@@ -44,7 +44,7 @@ def obj(hpt_config):
                                   bert_model_name=fixed_config["bert_model_name"],
                                   train_data_path=fixed_config["train_data_path"],
                                   test_data_path=fixed_config["test_data_path"],
-                                  dont_save_model=fixed_config["save_model"],
+                                  dont_save_model=fixed_config["dont_save_model"],
                                   )
 
     train_args = tce.TrainHyperparameters(num_epochs=fixed_config["num_epochs"],
