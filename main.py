@@ -58,12 +58,14 @@ if __name__ == "__main__":
                         help="Dropout rate")
     parser.add_argument("--label-smoothing", type=float, default=0,
                         help="Label smoothing rate (float between 0 and 1), default=0")
-    parser.add_argument("--gradient-clip", type=float, default=0,
+    parser.add_argument("--gradient-clip", type=float, default=None,
                         help="Gradient clipping `max_norm` param (float between 0 and 1), default=0")
     parser.add_argument("--batch-size", type=int, default=64,
                         help="Batch size for training")
     parser.add_argument("--dont-save-model", default=False, action='store_true',
                         help="Don't save the model after training, can be useful for debugging")
+    parser.add_argument("--warmup-percent", type=float, default=0.1,
+                        help="Warmup percent for the scheduler, default=0.1")
 
     parser.add_argument("--compute-recall-at-k", default=False, action='store_true')
 
@@ -81,24 +83,24 @@ if __name__ == "__main__":
         args.train_data_path = "data/DPR_pairs/" + args.train_data_path
         args.test_data_path = "data/DPR_pairs/" + args.test_data_path
 
-        for key, value in vars(args).items():
-            logger.info(f"{key}: {value}")
+        data_args = tce.TrainDataArgs(load_model_path=args.load_model_path,
+                                      save_model_path=args.save_model_path,
+                                      bert_model_name=args.bert_model_name,
+                                      train_data_path=args.train_data_path,
+                                      test_data_path=args.test_data_path,
+                                      dont_save_model=args.dont_save_model)
 
-        tce.train_ce(num_epochs=args.num_epochs,
-                     load_model_path=args.load_model_path,
-                     save_model_path=args.save_model_path,
-                     bert_model_name=args.bert_model_name,
-                     train_data_path=args.train_data_path,
-                     test_data_path=args.test_data_path,
-                     lr=args.lr,
-                     weight_decay=args.weight_decay,
-                     positive_weight=args.positive_weight,
-                     dropout_rate=args.dropout_rate,
-                     stop_time=args.stop_time,
-                     label_smoothing=args.label_smoothing,
-                     gradient_clip=args.gradient_clip,
-                     batch_size=args.batch_size,
-                     dont_save_model=args.dont_save_model, )
+        train_args = tce.TrainHyperparameters(num_epochs=args.num_epochs,
+                                              lr=args.lr,
+                                              weight_decay=args.weight_decay,
+                                              positive_weight=args.positive_weight,
+                                              dropout_rate=args.dropout_rate,
+                                              stop_time=args.stop_time,
+                                              label_smoothing=args.label_smoothing,
+                                              gradient_clip=args.gradient_clip,
+                                              batch_size=args.batch_size)
+
+        tce.train_ce(data_args, train_args)
 
     if args.compute_recall_at_k:
         ks = [1, 5, 10, 50, 200]

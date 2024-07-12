@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import torch
 from torch import nn
@@ -14,7 +14,7 @@ from transformers import AutoModelForSequenceClassification, BertForSequenceClas
 from transformers import DebertaV2ForSequenceClassification
 
 from md2d_dataset import MD2DDataset
-from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size
+from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -246,69 +246,98 @@ class WarmupCosineAnnealingWarmRestarts(LRScheduler):
             self.cosine_scheduler.step(epoch)
 
 
-def load_model(cross_encoder, load_path):
-    cross_encoder.load_state_dict(torch.load(load_path))
-    logger.info(f"Model loaded successfully from {load_path}")
+@dataclass
+class TrainDataArgs:
+    load_model_path: str = None
+    save_model_path: str = "cross_encoder.pt"
+    bert_model_name: str = "naver/trecdl22-crossencoder-debertav3"
+    train_data_path: str = 'data/DPR_pairs/DPR_pairs_train.jsonl'
+    test_data_path: str = 'data/DPR_pairs/DPR_pairs_test.jsonl'
+    dont_save_model: bool = False
+
+    def __repr__(self):
+        class_name = self.__class__.__name__
+        args_json = json.dumps(asdict(self), indent=4)
+        return f"{class_name}:\n{args_json}"
 
 
-def train_ce(num_epochs=30,
-             load_model_path=None,
-             save_model_path="cross_encoder.pt",
-             bert_model_name="naver/trecdl22-crossencoder-debertav3",
-             train_data_path='data/DPR_pairs/DPR_pairs_train.jsonl',
-             test_data_path='data/DPR_pairs/DPR_pairs_test.jsonl',
-             lr=1e-5,
-             weight_decay=1e-1,
-             positive_weight=2,
-             dropout_rate=0.1,
-             optimizer=None,
-             loss_fn=None,
-             stop_time=None,
-             label_smoothing=0,
-             gradient_clip=0,
-             batch_size=128,
-             warmup_percent=0.1,
-             nr_restarts=1,
-             lr_min=1e-7,
-             test_every="epoch",
-             dont_save_model=False
-             ):
-    gradient_clip = None if gradient_clip == 0 else gradient_clip
+@dataclass
+class TrainHyperparameters:
+    num_epochs: int = 30
+    lr: float = 1e-5
+    weight_decay: float = 1e-1
+    positive_weight: float = 2
+    dropout_rate: float = 0.1
+    optimizer: object = None
+    loss_fn: object = None
+    stop_time: int = None  # in seconds
+    label_smoothing: int = 0
+    gradient_clip: float = None
+    batch_size: int = 128
+    warmup_percent: float = 0.1
+    nr_restarts: int = 1
+    lr_min: float = 1e-7
+    test_every: str = "epoch"  # "epoch" or nr_gradient_steps
 
-    cross_encoder = CrossEncoder(bert_model_name, dropout_rate=dropout_rate)
-    if load_model_path is not None:
-        load_model(cross_encoder, load_model_path)
+    def __repr__(self):
+        class_name = self.__class__.__name__
+        args_json = json.dumps(asdict(self), indent=4)
+        return f"{class_name}:\n{args_json}"
+
+
+def train_ce(data_args: TrainDataArgs, train_hyperparameters: TrainHyperparameters):
+    logger.info(data_args)
+    logger.info(train_hyperparameters)
+
+    dropout_rate = train_hyperparameters.dropout_rate
+    label_smoothing = train_hyperparameters.label_smoothing
+
+    # Initialize cross encoder
+    cross_encoder = CrossEncoder(data_args.bert_model_name, dropout_rate=dropout_rate)
+    if data_args.load_model_path is not None:
+        load_model(cross_encoder, data_args.load_model_path)
     cross_encoder.to(device)
 
-    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
-    loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(positive_weight))
+    # Initialize datasets
+    train_dataset = MD2DDataset(data_args.train_data_path,
+                                data_args.bert_model_name,
+                                label_smoothing=label_smoothing,
+                                shuffle=False)
+    test_dataset = MD2DDataset(data_args.test_data_path,
+                               data_args.bert_model_name)
 
+    # Start training
     try:
-        pass
-        best = training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                             gradient_clip, train_data_path, batch_size, test_data_path, warmup_percent, nr_restarts,
-                             lr_min, test_every)
+        best = training_loop(cross_encoder, train_dataset, test_dataset, **asdict(train_hyperparameters))
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
         best = None
 
-    if not dont_save_model:
-        torch.save(cross_encoder.state_dict(), save_model_path)
-        logger.info(f"Model saved to {save_model_path}")
+    if not data_args.dont_save_model:
+        torch.save(cross_encoder.state_dict(), data_args.save_model_path)
+        logger.info(f"Model saved to {data_args.save_model_path}")
     return best
 
 
-def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
-                  gradient_clip, train_data_path, batch_size, test_data_path, warmup_percent, nr_restarts, lr_min,
-                  test_every):
-    # Initialize datasets
-    train_dataset = MD2DDataset(train_data_path,
-                                bert_model_name,
-                                label_smoothing=label_smoothing,
-                                shuffle=False)
-    test_dataset = MD2DDataset(test_data_path,
-                               bert_model_name)
-
+def training_loop(cross_encoder,
+                  train_dataset,
+                  test_dataset,
+                  num_epochs,
+                  lr,
+                  weight_decay,
+                  positive_weight,
+                  dropout_rate,
+                  optimizer,
+                  loss_fn,
+                  stop_time,
+                  label_smoothing,
+                  gradient_clip,
+                  batch_size,
+                  warmup_percent,
+                  nr_restarts,
+                  lr_min,
+                  test_every,
+                  ):
     # Train data loader
     batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
@@ -318,11 +347,16 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
     steps_per_epoch = len(train_loader) * batch_size
 
+    # Optimizer initialization
+    optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer.zero_grad()
+    loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(positive_weight))
+
     # Scheduler initialization
     scheduler = WarmupCosineAnnealingWarmRestarts(
         optimizer, steps_per_epoch, num_epochs, warmup_percent, nr_restarts, eta_min=lr_min)
-    optimizer.zero_grad()
 
+    # Track the best metric to restore model later
     best_metric_tracker = BestMetricTracker()
     if test_every == "epoch":
         test_every = len(train_loader)

@@ -127,3 +127,8 @@ def calc_physical_batch_size(batch_size, gpu_batches=None):
         return batch_size, 1
 
     return train_batch_size, gradient_accumulation_steps
+
+
+def load_model(cross_encoder, load_path):
+    cross_encoder.load_state_dict(torch.load(load_path))
+    logger.info(f"Model loaded successfully from {load_path}")
