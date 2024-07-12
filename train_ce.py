@@ -201,14 +201,29 @@ class CrossEncoder(torch.nn.Module):
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):
-    def __init__(self, optimizer, warmup_steps, T_0, T_mult=1, eta_min=0, last_epoch=-1):
-        self.warmup_steps = warmup_steps
-        self.T_0 = T_0
-        self.T_mult = T_mult
-        self.eta_min = eta_min
+    def __init__(self, optimizer, steps_per_epoch, num_epochs, warmup_percent, nr_restarts,
+                 t_mult=1, eta_min=0, last_epoch=-1):
+
+        # Calculate number of warmup steps
+        total_steps = steps_per_epoch * num_epochs
+        warmup_steps = int(warmup_percent * total_steps)
+
+        # Calculate nr of steps per restart
+        annealing_steps = total_steps - warmup_steps
+        first_restart_t0 = annealing_steps // nr_restarts
+
+        # Save initial learning rates
         self.base_lrs = [group['lr'] for group in optimizer.param_groups]
+
+        # Warmup specific parameters
+        self.warmup_steps = warmup_steps
+
+        # Cosine annealing specific parameters
+        self.T_0 = first_restart_t0
+        self.T_mult = t_mult
+        self.eta_min = eta_min
         self.cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer, T_0=T_0, T_mult=T_mult, eta_min=eta_min, last_epoch=last_epoch
+            optimizer, T_0=self.T_0, T_mult=t_mult, eta_min=eta_min, last_epoch=last_epoch
         )
         super(WarmupCosineAnnealingWarmRestarts, self).__init__(optimizer, last_epoch)
 
@@ -297,19 +312,13 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
     # only for evaluation - there are 10 negative samples and 1 positive sample
     test_batch_size = 1
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
+    steps_per_epoch = len(train_loader) * batch_size
 
     # Scheduler initialization
-    steps_per_epoch = len(train_loader) * batch_size
-    total_steps = steps_per_epoch * num_epochs
-    warmup_percent = warmup_percent
-    warmup_steps = int(warmup_percent * total_steps)
-    annealing_steps = total_steps - warmup_steps
-    nr_restarts = nr_restarts
-    first_restart_t0 = annealing_steps // nr_restarts
-    lr_min = lr_min
 
     scheduler = WarmupCosineAnnealingWarmRestarts(
-        optimizer, warmup_steps=warmup_steps, T_0=first_restart_t0, T_mult=1, eta_min=lr_min)
+        optimizer, steps_per_epoch, num_epochs, warmup_percent, nr_restarts, eta_min=lr_min)
+    optimizer.zero_grad()
 
     best_metric_tracker = BestMetricTracker()
     if test_every == "epoch":
