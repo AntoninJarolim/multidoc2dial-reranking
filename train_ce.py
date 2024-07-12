@@ -14,7 +14,7 @@ from transformers import AutoModelForSequenceClassification, BertForSequenceClas
 from transformers import DebertaV2ForSequenceClassification
 
 from md2d_dataset import MD2DDataset
-from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model
+from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model, save_model
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -66,12 +66,30 @@ class EvaluationMetrics:
 
 class BestMetricTracker:
     def __init__(self):
-        self.best_mrr = 0
-        self.best_mrr_epoch = -1
-        self.best_mrr_gs = -1
+        self.best_mrr = None
+        self.best_mrr_epoch = None
+        self.best_mrr_gs = None
+
+        self.current_best = None  # True if the current epoch is the best wrt MRR
+        self.nr_not_improved = 0  # Counter of consecutive epochs without improvement (for early stopping)
+
+    def is_current_best(self):
+        assert self.current_best is not None, "Error: Calling .step() before .is_current_best() is not allowed."
+        return self.current_best
 
     def step(self, evaluation: EvaluationMetrics, epoch, gs):
-        if evaluation.average_mrr > self.best_mrr:
+        self.current_best = True if self.best_mrr < evaluation.average_mrr else False
+        self.update_metrics(evaluation, epoch, gs)
+        self.update_not_improved()
+
+    def update_not_improved(self):
+        if self.current_best:
+            self.nr_not_improved = 0  # Reset counter if the current epoch is the best
+        else:
+            self.nr_not_improved += 1
+
+    def update_metrics(self, evaluation, epoch, gs):
+        if self.current_best:
             self.best_mrr = evaluation.average_mrr
             self.best_mrr_epoch = epoch
             self.best_mrr_gs = gs
@@ -308,20 +326,24 @@ def train_ce(data_args: TrainDataArgs, train_hyperparameters: TrainHyperparamete
 
     # Start training
     try:
-        best = training_loop(cross_encoder, train_dataset, test_dataset, **asdict(train_hyperparameters))
+        best = training_loop(cross_encoder,
+                             train_dataset,
+                             test_dataset,
+                             data_args.save_model_path,
+                             **asdict(train_hyperparameters))
     except KeyboardInterrupt:
         logger.info(f"Early stopping by user Ctrl+C interaction.")
         best = None
 
     if not data_args.dont_save_model:
-        torch.save(cross_encoder.state_dict(), data_args.save_model_path)
-        logger.info(f"Model saved to {data_args.save_model_path}")
+        save_model(cross_encoder, data_args.save_model_path)
     return best
 
 
 def training_loop(cross_encoder,
                   train_dataset,
                   test_dataset,
+                  save_model_path,
                   num_epochs,
                   lr,
                   weight_decay,
@@ -403,6 +425,13 @@ def training_loop(cross_encoder,
         tb_writer.add_scalar("train/TotalLoss", total_loss, gradient_steps)
         tb_writer.flush()
         total_loss, loss_positive, loss_negative = 0, 0, 0
+
+        if best_metric_tracker.is_current_best():
+            save_model(cross_encoder, save_model_path)
+
+        if best_metric_tracker.nr_not_improved > 2:
+            logger.info(f"Early stopping due to no improvement in the last 3 epochs.")
+            break
 
         # stopping based on max time to train
         if stop_time is not None and time.time() - start_t > stop_time:

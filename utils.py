@@ -132,3 +132,8 @@ def calc_physical_batch_size(batch_size, gpu_batches=None):
 def load_model(cross_encoder, load_path):
     cross_encoder.load_state_dict(torch.load(load_path))
     logger.info(f"Model loaded successfully from {load_path}")
+
+
+def save_model(cross_encoder, save_model_path):
+    torch.save(cross_encoder.state_dict(), save_model_path)
+    logger.info(f"Model saved to {save_model_path}")
