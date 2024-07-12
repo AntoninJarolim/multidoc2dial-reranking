@@ -124,7 +124,8 @@ class CrossEncoder(torch.nn.Module):
             return outputs[1]
 
     @torch.no_grad()
-    def evaluate(self, data_loader, loss_fn, take_n=0, save_all_losses=True) -> EvaluationMetrics:
+    def evaluate_ce(self, data_loader, loss_fn, take_n=0, save_all_losses=False) -> EvaluationMetrics:
+        self.eval()
         rr_total = 0
         loss_negative, loss_positive = 0, 0
         recalls = []
@@ -178,6 +179,7 @@ class CrossEncoder(torch.nn.Module):
         average_mrr = rr_total / num_batches if num_batches > 0 else 0
 
         loss_total = loss_negative + loss_positive
+        self.train()
         return EvaluationMetrics(average_mrr, sum_recalls, loss_total, loss_negative, loss_positive, sm_loss_sum)
 
     def process_large_batch(self, batch, max_sub_batch_size):
@@ -330,15 +332,11 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
         logger.info(f"({time.time() - start_t:0.2f})------------- Training epoch {epoch} started -------------")
 
         for i, batch in enumerate(train_loader):
-            # TESTING each x gradient steps
-            if gradient_steps % test_every == 0:
-                cross_encoder.eval()
-                with torch.no_grad():
-                    evaluation = cross_encoder.evaluate(test_loader, loss_fn,
-                                                        save_all_losses=False)
-                    evaluation.log(epoch, "test", gradient_steps, scheduler)
-                    best_metric_tracker.step(evaluation, epoch, gradient_steps)
-                cross_encoder.train()
+            # Testing each x gradient steps
+            if gradient_steps % test_every == 0 and gradient_steps > 0:
+                evaluation = cross_encoder.evaluate_ce(test_loader, loss_fn)
+                evaluation.log(epoch, "test", gradient_steps, scheduler)
+                best_metric_tracker.step(evaluation, epoch, gradient_steps)
 
             # Training step
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -354,9 +352,7 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
             optimizer.step()
             scheduler.step()
             total_loss += loss.item()
-
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
-
             gradient_steps += 1
 
         # logging train losses after each epoch
