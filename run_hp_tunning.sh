@@ -18,7 +18,6 @@ install_dependencies() {
     # Create and activate Conda environment
     echo "Creating Conda environment from environment.yml..."
     conda env create -f multidoc2dial-reranking/environment.yml
-    conda activate md2d-fresh 
 
     # Proceed with other setup tasks if needed
     # For example, copying data or running other installation scripts
@@ -42,6 +41,8 @@ if [ ! -d "data/naver_trecdl22-crossencoder-debertav3" ]; then
     cp -r ~/md2d_data/naver_trecdl22-crossencoder-debertav3 data/naver_trecdl22-crossencoder-debertav3
 fi
 
+source /mnt/data/xjarol06_firllm/conda/etc/profile.d/conda.sh
+conda activate md2d-fresh 
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export PYTHONPATH=$(pwd) # assuming you are in root repository folder
 cp ~/.host_config.json .host_config.json
