@@ -296,6 +296,7 @@ class TrainHyperparameters:
     nr_restarts: int = 1
     lr_min: float = 1e-7
     test_every: str = "epoch"  # "epoch" or nr_gradient_steps
+    evaluate_before_training: bool = False
 
     def __repr__(self):
         class_name = self.__class__.__name__
@@ -359,6 +360,7 @@ def training_loop(cross_encoder,
                   nr_restarts,
                   lr_min,
                   test_every,
+                  evaluate_before_training,
                   ):
     # Train data loader
     batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
@@ -390,7 +392,7 @@ def training_loop(cross_encoder,
 
         for i, batch in enumerate(train_loader):
             # Testing each x gradient steps
-            if gradient_steps % test_every == 0 and gradient_steps > 0:
+            if gradient_steps % test_every == 0 and evaluate_before_training:
                 evaluation = cross_encoder.evaluate_ce(test_loader, loss_fn)
                 evaluation.log(epoch, "test", gradient_steps, scheduler)
                 best_metric_tracker.step(evaluation, epoch, gradient_steps)

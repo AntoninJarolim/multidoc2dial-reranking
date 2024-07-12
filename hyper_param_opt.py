@@ -1,5 +1,6 @@
 import logging
 import os
+import socket
 import sys
 
 import numpy as np
@@ -33,7 +34,8 @@ def obj(hpt_config):
         "train_data_path": "data/DPR_pairs/DPR_pairs_train_50-60.json",
         "test_data_path": "data/DPR_pairs/DPR_pairs_test.jsonl",
         "test_every": "epoch",
-        "save_model": True
+        "save_model": True,
+        "evaluate_before_training": socket.gethostname() == SERVER.split(".")[0],
     }
 
     data_args = tce.TrainDataArgs(load_model_path=fixed_config["load_model_path"],
