@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 
 import numpy as np
 import torch
@@ -93,3 +94,36 @@ def transform_batch(batch, take_n=0):
         'att_mask': att_masks,
         'tt_ids': tt_ids
     }
+
+
+def calc_physical_batch_size(batch_size, gpu_batches=None):
+    """
+    Calculates logical and physical batch size based on the GPU configuration.
+    :param batch_size: Actual batch size
+    :param gpu_batches: Json dict with GPU name as key and physical batch size as value
+    :return: Tuple of logical and physical batch size
+    """
+    assert batch_size > 0, "Batch size should greater than 0"
+
+    default_gpu_batches = {
+        "NVIDIA GeForce RTX 2080 Ti": 2,
+        "NVIDIA GeForce RTX 3090": 4,
+        "NVIDIA RTX A5000": 4,
+    }
+    gpu_batches = gpu_batches or default_gpu_batches
+
+    # Get the host name
+    host_name = socket.gethostname()
+    hosts_gpu_file = ".host_config.json"  # Json dict with host name as key and gpu name as value
+    gpu_hosts = json.load(open(hosts_gpu_file))
+    assert host_name in gpu_hosts, f"Host {host_name} not found in {hosts_gpu_file} file"
+
+    # Calculate logical and physical batch size
+    train_batch_size = gpu_batches[gpu_hosts[host_name]]
+    gradient_accumulation_steps = batch_size // train_batch_size
+
+    # Do not accumulate gradients if the batch size is less than the physical batch size
+    if train_batch_size >= batch_size:
+        return batch_size, 1
+
+    return train_batch_size, gradient_accumulation_steps

@@ -4,18 +4,17 @@ import time
 from dataclasses import dataclass
 
 import torch
-from torch import nn, cuda
+from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, BertForSequenceClassification, DebertaV2Model, BertModel
-from transformers import AutoTokenizer
 from transformers import DebertaV2ForSequenceClassification
 
 from md2d_dataset import MD2DDataset
-from utils import mrr_metric, transform_batch, pred_recall_metric
+from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -302,22 +301,24 @@ def train_ce(num_epochs=30,
 def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name, stop_time, label_smoothing,
                   gradient_clip, train_data_path, batch_size, test_data_path, warmup_percent, nr_restarts, lr_min,
                   test_every):
+    # Initialize datasets
     train_dataset = MD2DDataset(train_data_path,
                                 bert_model_name,
                                 label_smoothing=label_smoothing,
                                 shuffle=False)
-
     test_dataset = MD2DDataset(test_data_path,
                                bert_model_name)
+
+    # Train data loader
+    batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
-    # only for evaluation - there are 10 negative samples and 1 positive sample
-    test_batch_size = 1
+    # Test data loader
+    test_batch_size = 1  # Each line of testing data is a single batch
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
     steps_per_epoch = len(train_loader) * batch_size
 
     # Scheduler initialization
-
     scheduler = WarmupCosineAnnealingWarmRestarts(
         optimizer, steps_per_epoch, num_epochs, warmup_percent, nr_restarts, eta_min=lr_min)
     optimizer.zero_grad()
@@ -340,17 +341,20 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
 
             # Training step
             batch = {k: v.to(device) for k, v in batch.items()}
-
-            optimizer.zero_grad()
-
             pred = cross_encoder(input_ids=batch['in_ids'], attention_mask=batch['att_mask'])
             loss = loss_fn(pred, batch['label'])
-
             loss.backward()
+
             if gradient_clip is not None:
                 torch.nn.utils.clip_grad_norm_(cross_encoder.parameters(), gradient_clip)
-            optimizer.step()
-            scheduler.step()
+
+            # Accumulate gradients to address gpu memory limitations
+            if (gradient_steps + 1) % gradient_accumulation_steps == 0:
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            # Update logging variables
             total_loss += loss.item()
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
             gradient_steps += 1

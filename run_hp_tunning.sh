@@ -43,6 +43,7 @@ fi
 
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export PYTHONPATH=$(pwd) # assuming you are in root repository folder
+cp ~/.host_config.json .host_config.json
 
 MONGODBSERVER=pcknot6.fit.vutbr.cz
 DB_KEY=ce
