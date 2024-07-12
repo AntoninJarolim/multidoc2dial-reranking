@@ -38,12 +38,14 @@ fi
 
 # Copy data if not already present
 if [ ! -d "data/naver_trecdl22-crossencoder-debertav3" ]; then
+    echo "Copying training data from homedir to this directory"
     cp -r ~/md2d_data/naver_trecdl22-crossencoder-debertav3 data/naver_trecdl22-crossencoder-debertav3
 fi
 
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export PYTHONPATH=$(pwd) # assuming you are in root repository folder
 cp ~/.host_config.json .host_config.json
+git pull
 
 MONGODBSERVER=pcknot6.fit.vutbr.cz
 DB_KEY=ce
