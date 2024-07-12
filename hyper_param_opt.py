@@ -36,6 +36,7 @@ def obj(hpt_config):
         "test_every": "epoch",
         "save_model": True,
         "evaluate_before_training": socket.gethostname() == SERVER.split(".")[0],
+        "evaluation_take_n": 50,
     }
 
     data_args = tce.TrainDataArgs(load_model_path=fixed_config["load_model_path"],
@@ -53,8 +54,12 @@ def obj(hpt_config):
                                           dropout_rate=hpt_config["dropout_rate"],
                                           label_smoothing=hpt_config["label_smoothing"],
                                           gradient_clip=hpt_config["gradient_clip"],
-                                          batch_size=hpt_config["batch_size"])
-
+                                          batch_size=hpt_config["batch_size"],
+                                          evaluation_take_n=fixed_config["evaluation_take_n"],
+                                          lr_min=hpt_config["lr_min"],
+                                          warmup_percent=hpt_config["warmup_percent"],
+                                          nr_restarts=hpt_config["nr_restarts"],
+                                          )
     min_mrr = tce.train_ce(data_args, train_args)
     if min_mrr is None:
         result = {

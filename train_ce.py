@@ -160,12 +160,7 @@ class CrossEncoder(torch.nn.Module):
         for i, batch in tqdm(enumerate(data_loader), total=len(data_loader), desc="Evaluation"):
             batch = transform_batch(batch, take_n)
             batch = {k: v.to(device) for k, v in batch.items()}
-            if take_n == 0:
-                pred = self.process_large_batch(batch, 64)
-            else:
-                pred = self(input_ids=batch['in_ids'],
-                            attention_mask=batch['att_mask'],
-                            token_type_ids=batch['tt_ids'])
+            pred = self.process_large_batch(batch, 32)
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
 
             sm_loss_sum += bce_loss(softmax(pred), batch['label']).cpu()
@@ -297,6 +292,7 @@ class TrainHyperparameters:
     lr_min: float = 1e-7
     test_every: str = "epoch"  # "epoch" or nr_gradient_steps
     evaluate_before_training: bool = False
+    evaluation_take_n: int = 200
 
     def __repr__(self):
         class_name = self.__class__.__name__
@@ -361,6 +357,7 @@ def training_loop(cross_encoder,
                   lr_min,
                   test_every,
                   evaluate_before_training,
+                  evaluation_take_n
                   ):
     # Train data loader
     batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
@@ -393,7 +390,7 @@ def training_loop(cross_encoder,
         for i, batch in enumerate(train_loader):
             # Testing each x gradient steps
             if gradient_steps % test_every == 0 and evaluate_before_training:
-                evaluation = cross_encoder.evaluate_ce(test_loader, loss_fn)
+                evaluation = cross_encoder.evaluate_ce(test_loader, loss_fn, take_n=evaluation_take_n)
                 evaluation.log(epoch, "test", gradient_steps, scheduler)
                 best_metric_tracker.step(evaluation, epoch, gradient_steps)
 
