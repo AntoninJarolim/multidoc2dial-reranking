@@ -62,8 +62,10 @@ if __name__ == "__main__":
                         help="Gradient clipping `max_norm` param (float between 0 and 1), default=0")
     parser.add_argument("--batch-size", type=int, default=64,
                         help="Batch size for training")
+    parser.add_argument("--dont-save-model", default=False, action='store_true',
+                        help="Don't save the model after training, can be useful for debugging")
 
-    parser.add_argument("--compute_recall_at_k", default=False, action='store_true')
+    parser.add_argument("--compute-recall-at-k", default=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -95,7 +97,8 @@ if __name__ == "__main__":
                      stop_time=args.stop_time,
                      label_smoothing=args.label_smoothing,
                      gradient_clip=args.gradient_clip,
-                     batch_size=args.batch_size)
+                     batch_size=args.batch_size,
+                     dont_save_model=args.dont_save_model, )
 
     if args.compute_recall_at_k:
         ks = [1, 5, 10, 50, 200]

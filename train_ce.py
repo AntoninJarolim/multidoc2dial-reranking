@@ -255,6 +255,7 @@ def train_ce(num_epochs=30,
              nr_restarts=1,
              lr_min=1e-7,
              test_every="epoch",
+             dont_save_model=False
              ):
     gradient_clip = None if gradient_clip == 0 else gradient_clip
 
@@ -262,8 +263,6 @@ def train_ce(num_epochs=30,
     if load_model_path is not None:
         load_model(cross_encoder, load_model_path)
     cross_encoder.to(device)
-
-    print(cuda.memory_summary())
 
     optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
     loss_fn = loss_fn or nn.BCEWithLogitsLoss(pos_weight=torch.tensor(positive_weight))
@@ -277,8 +276,9 @@ def train_ce(num_epochs=30,
         logger.info(f"Early stopping by user Ctrl+C interaction.")
         best = None
 
-    torch.save(cross_encoder.state_dict(), save_model_path)
-    logger.info(f"Model saved to {save_model_path}")
+    if not dont_save_model:
+        torch.save(cross_encoder.state_dict(), save_model_path)
+        logger.info(f"Model saved to {save_model_path}")
     return best
 
 
@@ -333,7 +333,6 @@ def training_loop(cross_encoder, loss_fn, num_epochs, optimizer, bert_model_name
 
             # Training step
             batch = {k: v.to(device) for k, v in batch.items()}
-            print(cuda.memory_summary())
 
             optimizer.zero_grad()
 
