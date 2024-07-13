@@ -134,6 +134,11 @@ def load_model(cross_encoder, load_path):
     logger.info(f"Model loaded successfully from {load_path}")
 
 
-def save_model(cross_encoder, save_model_path):
+def save_model(cross_encoder, save_model_path, msg_str=None):
     torch.save(cross_encoder.state_dict(), save_model_path)
-    logger.info(f"Model saved to {save_model_path}")
+    msg_str = msg_str if msg_str is not None else "Model saved to "
+    logger.info(f"{msg_str} {save_model_path}")
+
+
+def save_best_model(cross_encoder, save_model_path):
+    save_model(cross_encoder, save_model_path, "New best saved to ")

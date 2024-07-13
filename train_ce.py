@@ -428,7 +428,7 @@ def training_loop(cross_encoder,
         total_loss, loss_positive, loss_negative = 0, 0, 0
 
         if best_metric_tracker.is_current_best():
-            save_model(cross_encoder, save_model_path)
+            save_best_model(cross_encoder, save_model_path)
 
         if best_metric_tracker.nr_not_improved > 2:
             logger.info(f"Early stopping due to no improvement in the last 3 epochs.")
