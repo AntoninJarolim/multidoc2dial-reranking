@@ -68,6 +68,8 @@ if __name__ == "__main__":
                         help="Batch size for training")
     parser.add_argument("--dont-save-model", default=False, action='store_true',
                         help="Don't save the model after training, can be useful for debugging")
+    parser.add_argument("--evaluate-before-training", default=False, action='store_true',
+                        help="Evaluate the model before training")
     parser.add_argument("--warmup-percent", type=float, default=0.1,
                         help="Warmup percent for the scheduler, default=0.1")
 
@@ -102,7 +104,9 @@ if __name__ == "__main__":
                                               stop_time=args.stop_time,
                                               label_smoothing=args.label_smoothing,
                                               gradient_clip=args.gradient_clip,
-                                              batch_size=args.batch_size)
+                                              batch_size=args.batch_size,
+                                              evaluate_before_training=args.evaluate_before_training,
+                                              )
 
         tce.train_ce(data_args, train_args)
 

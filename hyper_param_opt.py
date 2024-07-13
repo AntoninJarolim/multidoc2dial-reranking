@@ -88,8 +88,6 @@ def obj(hpt_config):
 def run_hyperparam_opt():
     trials = MongoTrials(DB_ADDRESS, exp_key=DB_KEY)
     try:
-        # np arrays of ints to prevent hyperopt auto conversion to float
-        # ints of type object to make it json serializable
         space = {
             "label_smoothing": hp.uniform("label_smoothing", low=0.0, high=0.25),
             "dropout_rate": hp.uniform("dropout_rate", low=0.0, high=0.4),
@@ -97,12 +95,12 @@ def run_hyperparam_opt():
             "positive_weight": hp.uniform("positive_weight", low=1, high=8),
             "lr": hp.loguniform("lr", low=np.log(1e-6), high=np.log(2e-4)),
             "lr_min": hp.loguniform("lr_min", low=np.log(1e-7), high=np.log(1e-6)),
-            "batch_size": hp.choice("batch_size", np.array([16, 32, 64, 128, 256, 512], dtype=object)),
+            "batch_size": hp.choice("batch_size", [16, 32, 64, 128, 256, 512]),
             "warmup_percent": hp.uniform("warmup_percent", low=0.05, high=0.2),
-            "nr_restarts": hp.choice("nr_restarts", np.array([1, 2, 3, 4, 5], dtype=object)),
-            "gradient_clip": hp.choice("gradient_clip", np.array([0, 1, 2], dtype=object)),
+            "nr_restarts": hp.choice("nr_restarts", [1, 2, 3, 4, 5]),
+            "gradient_clip": hp.choice("gradient_clip", [0, 1, 2]),
         }
-        best = fmin(obj, space, trials=trials, algo=tpe.suggest, max_evals=30)
+        best = fmin(obj, space, trials=trials, algo=tpe.suggest, max_evals=100)
         logger.info("#" * 20)
         logger.info(best)
     except KeyboardInterrupt:

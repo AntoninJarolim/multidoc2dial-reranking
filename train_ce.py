@@ -14,7 +14,8 @@ from transformers import AutoModelForSequenceClassification, BertForSequenceClas
 from transformers import DebertaV2ForSequenceClassification
 
 from md2d_dataset import MD2DDataset
-from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model, save_model
+from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model, save_model, \
+    save_best_model
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -70,12 +71,15 @@ class BestMetricTracker:
         self.best_mrr_epoch = None
         self.best_mrr_gs = None
 
+        self.gs = None
+
         self.current_best = None  # True if the current epoch is the best wrt MRR
         self.nr_not_improved = 0  # Counter of consecutive epochs without improvement (for early stopping)
 
     def is_current_best(self):
-        assert self.current_best is not None, "Error: Calling .step() before .is_current_best() is not allowed."
-        return self.current_best
+        # First epoch is always the best
+        res = True if self.current_best is None else self.current_best
+        return res
 
     def step(self, evaluation: EvaluationMetrics, epoch, gs):
         self.current_best = True if self.best_mrr < evaluation.average_mrr else False
@@ -292,7 +296,7 @@ class TrainHyperparameters:
     lr_min: float = 1e-7
     test_every: str = "epoch"  # "epoch" or nr_gradient_steps
     evaluate_before_training: bool = False
-    evaluation_take_n: int = 200
+    evaluation_take_n: int = 50
 
     def __repr__(self):
         class_name = self.__class__.__name__
@@ -363,11 +367,13 @@ def training_loop(cross_encoder,
     batch_size, gradient_accumulation_steps = calc_physical_batch_size(batch_size)
     logger.info(f"batch_size: {batch_size}\ngradient_accumulation_steps: {gradient_accumulation_steps}")
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
+    logger.info(f"Train data len: {len(train_loader)}")
 
     # Test data loader
     test_batch_size = 1  # Each line of testing data is a single batch
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
     steps_per_epoch = len(train_loader) * batch_size
+    logger.info(f"Test data len: {len(test_loader)}")
 
     # Optimizer initialization
     optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
@@ -383,17 +389,24 @@ def training_loop(cross_encoder,
     if test_every == "epoch":
         test_every = len(train_loader)
 
-    logger.info(f"TEST_EVERY: {test_every}")
-    total_loss, loss_positive, loss_negative, gradient_steps = 0, 0, 0, 0
+    # Create a list of gradient steps at which to evaluate the model
+    max_nr_evaluations = (num_epochs * len(train_loader)) // test_every
+    logger.info(f"Max nr evaluations: {max_nr_evaluations}")
+    test_grad_steps = torch.arange(max_nr_evaluations) * test_every
+    if not evaluate_before_training:
+        test_grad_steps = test_grad_steps[1:]
+
+    logger.info(f"evaluating at gradient steps: {test_grad_steps}")
+    total_loss, loss_positive, loss_negative, grad_step = 0, 0, 0, 0
     for epoch in range(num_epochs):
         logger.info(f"({time.time() - start_t:0.2f})------------- Training epoch {epoch} started -------------")
 
-        for i, batch in enumerate(train_loader):
-            # Testing each x gradient steps
-            if gradient_steps % test_every == 0 and evaluate_before_training:
+        for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Training"):
+
+            if grad_step in test_grad_steps:
                 evaluation = cross_encoder.evaluate_ce(test_loader, loss_fn, take_n=evaluation_take_n)
-                evaluation.log(epoch, "test", gradient_steps, scheduler)
-                best_metric_tracker.step(evaluation, epoch, gradient_steps)
+                evaluation.log(epoch, "test", grad_step, scheduler)
+                best_metric_tracker.step(evaluation, epoch, grad_step)
 
             # Training step
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -406,7 +419,7 @@ def training_loop(cross_encoder,
                 torch.nn.utils.clip_grad_norm_(cross_encoder.parameters(), gradient_clip)
 
             # Accumulate gradients to address gpu memory limitations
-            if (gradient_steps + 1) % gradient_accumulation_steps == 0:
+            if (grad_step + 1) % gradient_accumulation_steps == 0:
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
@@ -414,16 +427,16 @@ def training_loop(cross_encoder,
             # Update logging variables
             total_loss += loss.item()
             loss_negative, loss_positive = separate_losses(batch, loss_fn, pred, loss_negative, loss_positive)
-            gradient_steps += 1
+            grad_step += 1
 
         # logging train losses after each epoch
         logger.info(f"({time.time() - start_t:0.2f}) "
-                    f"Epoch: {epoch}; gs: {gradient_steps}; on training dataset: "
+                    f"Epoch: {epoch}; gs: {grad_step}; on training dataset: "
                     f"loss: {loss_positive + loss_negative}; "
                     f"positive-loss: {loss_positive:0.2f}; "
                     f"negative-loss: {loss_negative:0.2f} ")
 
-        tb_writer.add_scalar("train/TotalLoss", total_loss, gradient_steps)
+        tb_writer.add_scalar("train/TotalLoss", total_loss, grad_step)
         tb_writer.flush()
         total_loss, loss_positive, loss_negative = 0, 0, 0
 
