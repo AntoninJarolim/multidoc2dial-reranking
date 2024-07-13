@@ -52,6 +52,7 @@ def obj(hpt_config):
                                   )
 
     train_args = tce.TrainHyperparameters(num_epochs=fixed_config["num_epochs"],
+                                          stop_time=fixed_config["stop_time"],
                                           lr=hpt_config["lr"],
                                           weight_decay=hpt_config["weight_decay"],
                                           positive_weight=hpt_config["positive_weight"],
@@ -63,6 +64,8 @@ def obj(hpt_config):
                                           lr_min=hpt_config["lr_min"],
                                           warmup_percent=hpt_config["warmup_percent"],
                                           nr_restarts=hpt_config["nr_restarts"],
+                                          evaluate_before_training=fixed_config["evaluate_before_training"],
+                                          test_every=fixed_config["test_every"],
                                           )
     min_mrr = tce.train_ce(data_args, train_args)
     if min_mrr is None:
