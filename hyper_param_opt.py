@@ -25,6 +25,10 @@ def obj(hpt_config):
     save_model_name = f"CE_lr{hpt_config['lr']:.2f}_bs{hpt_config['batch_size']:.2f}.pt"
     setup_logging(save_model_name)
 
+    hostname = socket.gethostname()
+    logger.info(f"Hostname: {hostname}")
+    eval_before_training = hostname == SERVER.split(".")[0]
+
     fixed_config = {
         "num_epochs": 10,
         "stop_time": None,
@@ -35,7 +39,7 @@ def obj(hpt_config):
         "test_data_path": "data/DPR_pairs/DPR_pairs_test.jsonl",
         "test_every": "epoch",
         "dont_save_model": False,
-        "evaluate_before_training": socket.gethostname() == SERVER.split(".")[0],
+        "evaluate_before_training": eval_before_training,
         "evaluation_take_n": 50,
     }
 
