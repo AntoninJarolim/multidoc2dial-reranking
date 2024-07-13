@@ -22,7 +22,7 @@ def obj(hpt_config):
     os.chdir(PATH)
     sys.path.append(PATH)
 
-    save_model_name = f"CE_lr{hpt_config['lr']:.2f}_bs{hpt_config['batch_size']:.2f}.pt"
+    save_model_name = f"CE_lr{hpt_config['lr']}_bs{hpt_config['batch_size']}.pt"
     setup_logging(save_model_name)
 
     hostname = socket.gethostname()
