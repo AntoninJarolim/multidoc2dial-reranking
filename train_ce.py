@@ -296,7 +296,7 @@ class TrainHyperparameters:
     lr_min: float = 1e-7
     test_every: str = "epoch"  # "epoch" or nr_gradient_steps
     evaluate_before_training: bool = False
-    evaluation_take_n: int = 50
+    evaluation_take_n: int = 200
 
     def __repr__(self):
         class_name = self.__class__.__name__
