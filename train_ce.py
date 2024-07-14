@@ -82,9 +82,16 @@ class BestMetricTracker:
         return res
 
     def step(self, evaluation: EvaluationMetrics, epoch, gs):
-        self.current_best = True if self.best_mrr < evaluation.average_mrr else False
-        self.update_metrics(evaluation, epoch, gs)
-        self.update_not_improved()
+        if self.best_mrr is None:
+            # Only initialization
+            self.current_best = True  # First epoch is always the best
+            self.update_metrics(evaluation, epoch, gs)
+        else:
+            # Update the best metric
+            self.current_best = True if self.best_mrr < evaluation.average_mrr else False
+            if self.current_best:
+                self.update_metrics(evaluation, epoch, gs)
+            self.update_not_improved()
 
     def update_not_improved(self):
         if self.current_best:
@@ -93,10 +100,9 @@ class BestMetricTracker:
             self.nr_not_improved += 1
 
     def update_metrics(self, evaluation, epoch, gs):
-        if self.current_best:
-            self.best_mrr = evaluation.average_mrr
-            self.best_mrr_epoch = epoch
-            self.best_mrr_gs = gs
+        self.best_mrr = evaluation.average_mrr
+        self.best_mrr_epoch = epoch
+        self.best_mrr_gs = gs
 
 
 class CrossEncoder(torch.nn.Module):
