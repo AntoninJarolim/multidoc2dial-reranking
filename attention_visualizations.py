@@ -23,20 +23,23 @@ data_dialogues = get_data()
 print(data_dialogues[0])
 
 # This variables will be set in configuration sidebar
-dialog_id = None  # This is first par of the dialog for now
+set_data = {
+    "current_dialogue": 0,
+}
 
 # CONFIGURATION SIDEBAR
 with st.sidebar:
     st.markdown("## Configuration")
     st.markdown("### Dialog loading")
-    selected = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
+    dialogue_index = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
+    set_data["current_dialogue"] = dialogue_index
 
-print(selected)
+selected_dialog = data_dialogues[dialogue_index]
 
 # MID SECTION CHAT
 with chat:
     message("Hello 👋", )
-    message(f"{selected}", is_user=True)
+    message(f"{dialogue_index}", is_user=True)
 
     st.chat_input("Say something")
 
