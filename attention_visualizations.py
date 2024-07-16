@@ -1,11 +1,14 @@
+from contextlib import contextmanager
+
 import numpy as np
 import streamlit as st
 from streamlit_chat import message
 
 st.set_page_config(layout="wide")
 
-chat, _, explaining = st.columns([3, 1, 2])
+chat, _, explaining = st.columns([6, 1, 6])
 data = np.random.randn(10, 1)
+
 
 # Using "with" notation
 with st.sidebar:
@@ -23,7 +26,42 @@ with chat:
     st.chat_input("Say something")
 
 with explaining:
-    with st.container(border=True):
-        st.write("This is inside the container")
+    with st.container(height=800):
+        gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
 
-    st.write("This is a sidebar with a radio button")
+        with gt_tab:
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+            st.write("This is tab with ground truths will be displayed")
+            st.write("This is a sidebar with a radio button")
+
+    with att_rollout_tab:
+        st.write("Att rollout tab")
+
+    with raw_att_tab:
+        st.write("Raw attention tab")
+
