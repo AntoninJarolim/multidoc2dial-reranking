@@ -1,6 +1,6 @@
 import json
 
-dialog_path = 'data/data/multidoc2dial/multidoc2dial_dial_train.json'
+dialog_path = 'data/data/multidoc2dial/multidoc2dial_dial_validation.json'
 passage_path = 'data/data/multidoc2dial/multidoc2dial_doc.json'
 
 oa_index = {}

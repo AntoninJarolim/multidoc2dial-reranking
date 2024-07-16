@@ -1,3 +1,4 @@
+import functools
 import json
 import sys
 
@@ -17,6 +18,7 @@ neg_psg_counts = pd.Series([0 for x in range(MAX_PSG_ID)])
 PARSING_DPR_RESULTS = True
 
 
+# PREPARE TRAIN X VALIDATION X TEST DATA
 def get_negative_passages(dpr_res):
     assert not PARSING_DPR_RESULTS, "This function is only for parsing DPR results."
     return [dpr_res["hard_negative_ctxs"][0]] + dpr_res["negative_ctxs"]
@@ -124,7 +126,7 @@ def create_train_pairs(split, take_only_one=False):
     print(f"Processing finished.")
 
 
-if __name__ == "__main__":
+def create_train_data():
     split = sys.argv[1]
     take_only_one = bool(int(sys.argv[2]))
     PARSING_DPR_RESULTS = bool(int(sys.argv[3]))
@@ -142,3 +144,41 @@ if __name__ == "__main__":
         create_train_pairs("validation")
     else:
         print("Please specify if you wish to create test or train data by test or train parameter.")
+
+
+# CREATE DATA FOR DIALOG VISUALIZATION
+def find_dialog(utterance, dialog_data):
+    for dialog in dialog_data:
+        for turn in dialog["turns"]:
+            if turn["utterance"] == utterance:
+                return dialog
+    raise Exception(f"Dialog not found for utterance: {utterance}")
+
+
+def create_dialog_example_data():
+    RA_RANK_DATA_PATH = 'data/DPR_pairs/DPR_pairs_validation_DEBUG.jsonl'
+    DIALOG_DATA_PATH = 'data/data/multidoc2dial/multidoc2dial_dial_validati_refs.json'
+
+    rerank_data = []
+    with jsonlines.open(RA_RANK_DATA_PATH) as f:
+        for line in f:
+            rerank_data.append(line)
+    dialog_data_domains = json.load(open(DIALOG_DATA_PATH))["dial_data"].values()
+    dialog_data = functools.reduce(lambda a, b: a + b, dialog_data_domains)
+
+    paired_data = []
+    for i, rerank_items in enumerate(rerank_data):
+        utterance_history, passage = rerank_items[0]["x"].split("[SEP]")
+        utterance = utterance_history.split("agent: ")[0]
+        dialog = find_dialog(utterance, dialog_data)
+        paired_data.append({
+            "to_rerank": rerank_items[:15],
+            "full_passage": passage,
+            "dialog": dialog,
+        })
+
+    json.dump(paired_data, open("data/examples/200_dialogues_reranking.json", "w"))
+
+
+if __name__ == "__main__":
+    create_dialog_example_data()
