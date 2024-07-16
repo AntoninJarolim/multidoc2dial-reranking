@@ -162,6 +162,9 @@ def create_dialog_example_data():
     rerank_data = []
     with jsonlines.open(RA_RANK_DATA_PATH) as f:
         for line in f:
+            have_correct = any([x["label"] == 1 for x in line])
+            if not have_correct:
+                continue
             rerank_data.append(line)
     dialog_data_domains = json.load(open(DIALOG_DATA_PATH))["dial_data"].values()
     dialog_data = functools.reduce(lambda a, b: a + b, dialog_data_domains)
@@ -170,14 +173,20 @@ def create_dialog_example_data():
     for i, rerank_items in enumerate(rerank_data):
         utterance_history, passage = rerank_items[0]["x"].split("[SEP]")
         utterance = utterance_history.split("agent: ")[0]
-        dialog = find_dialog(utterance, dialog_data)
+        try:
+            dialog = find_dialog(utterance, dialog_data)
+        except:
+            # Sometimes there are two user utterances in row
+            new_utterance = utterance_history.split("user: ")[0]
+            dialog = find_dialog(new_utterance, dialog_data)
+            print("Found dialog with two user utterance in row.")
         paired_data.append({
             "to_rerank": rerank_items[:15],
             "full_passage": passage,
             "dialog": dialog,
         })
 
-    json.dump(paired_data, open("data/examples/200_dialogues_reranking.json", "w"))
+    json.dump(paired_data[:200], open("data/examples/200_dialogues_reranking.json", "w"))
 
 
 if __name__ == "__main__":
