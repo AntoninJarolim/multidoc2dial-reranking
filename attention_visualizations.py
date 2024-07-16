@@ -29,8 +29,8 @@ set_data = {
 
 # CONFIGURATION SIDEBAR
 with st.sidebar:
-    st.markdown("## Configuration")
-    st.markdown("### Dialog loading")
+    "## Configuration"
+    "### Dialog loading"
     dialogue_index = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
     set_data["current_dialogue"] = dialogue_index
 
@@ -54,16 +54,19 @@ with chat:
 
 # RIGHT SECTION EXPLAINING features
 with explaining:
-    st.markdown("### Reranked results and attention visualizations")
+    "### Reranked results and attention visualizations"
     with st.container(height=800):
         gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
 
         with gt_tab:
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
+            "This is tab with ground truths will be displayed"
+            "This is a sidebar with a radio button"
+            st.divider()
+            "This is tab with ground truths will be displayed"
+            "This is a sidebar with a radio button"
 
     with att_rollout_tab:
-        st.write("Att rollout tab")
+        "Att rollout tab"
 
     with raw_att_tab:
-        st.write("Raw attention tab")
+        "Raw attention tab"
