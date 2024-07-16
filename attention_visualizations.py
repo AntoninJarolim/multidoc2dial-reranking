@@ -35,47 +35,30 @@ with st.sidebar:
     set_data["current_dialogue"] = dialogue_index
 
 selected_dialog = data_dialogues[dialogue_index]
+diag_turns = selected_dialog["dialog"]["turns"]
+rerank_dialog_examples = selected_dialog["to_rerank"]
+utterance_history, passage = [d["x"] for d in rerank_dialog_examples if d["label"]][0].split("[SEP]")
+last_user_utterance = utterance_history.split("agent: ")[0]
+last_user_utterance_id = [t['turn_id'] for t in diag_turns if t["utterance"] == last_user_utterance][0]
+grounded_agent_utterance_id = last_user_utterance_id + 1
+grounded_agent_utterance = diag_turns[grounded_agent_utterance_id]
+nr_show_utterances = grounded_agent_utterance_id
 
 # MID SECTION CHAT
 with chat:
-    message("Hello 👋", )
-    message(f"{dialogue_index}", is_user=True)
+    for utterance in diag_turns[:nr_show_utterances]:
+        is_user = True if utterance["role"] == "user" else False
+        message(f"{utterance['utterance']}", is_user=is_user)
 
     st.chat_input("Say something")
 
 # RIGHT SECTION EXPLAINING features
 with explaining:
-    st.markdown("### Retrieved results and attention visualizations")
+    st.markdown("### Reranked results and attention visualizations")
     with st.container(height=800):
         gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
 
         with gt_tab:
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
-            st.write("This is tab with ground truths will be displayed")
-            st.write("This is a sidebar with a radio button")
             st.write("This is tab with ground truths will be displayed")
             st.write("This is a sidebar with a radio button")
 
