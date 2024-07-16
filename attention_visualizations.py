@@ -19,12 +19,22 @@ def get_data():
     return json.load(open(EXAMPLE_VALIDATION_DATA))
 
 
+def split_utterance_history(raw_rarank_data):
+    return list(map(lambda x: {
+        "x": x["x"],
+        "label": x["label"],
+        "utterance_history": x["x"].split("[SEP]")[0],
+        "passage": x["x"].split("[SEP]")[1]
+    }, raw_rarank_data))
+
+
 data_dialogues = get_data()
 print(data_dialogues[0])
 
 # This variables will be set in configuration sidebar
 set_data = {
     "current_dialogue": 0,
+    "gt_label_colour": "#2222DD",
 }
 
 # CONFIGURATION SIDEBAR
@@ -36,8 +46,10 @@ with st.sidebar:
 
 selected_dialog = data_dialogues[dialogue_index]
 diag_turns = selected_dialog["dialog"]["turns"]
-rerank_dialog_examples = selected_dialog["to_rerank"]
-utterance_history, passage = [d["x"] for d in rerank_dialog_examples if d["label"]][0].split("[SEP]")
+rerank_dialog_examples = split_utterance_history(selected_dialog["to_rerank"])
+utterance_history, passage = [(d["utterance_history"], d["passage"])
+                              for d in rerank_dialog_examples
+                              if d["label"]][0]
 last_user_utterance = utterance_history.split("agent: ")[0]
 last_user_utterance_id = [t['turn_id'] for t in diag_turns if t["utterance"] == last_user_utterance][0]
 grounded_agent_utterance_id = last_user_utterance_id + 1
@@ -52,21 +64,34 @@ with chat:
 
     st.chat_input("Say something")
 
+
 # RIGHT SECTION EXPLAINING features
+def show_annotated_psg(passage_text, idx, is_grounding=False):
+    with st.container(border=True):
+        col_idx, col2 = st.columns([6, 100])
+        with col_idx:
+            f'##### {idx}'
+
+        with col2:
+            f"{passage_text}"
+        # annotated_text(
+        #     (passage_text, "", set_data["gt_label_colour"]),
+        # )
+
+
 with explaining:
     "### Reranked results and attention visualizations"
     with st.container(height=800):
         gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
 
         with gt_tab:
-            "This is tab with ground truths will be displayed"
-            "This is a sidebar with a radio button"
-            st.divider()
-            "This is tab with ground truths will be displayed"
-            "This is a sidebar with a radio button"
+            gt_label = "GT"
 
-    with att_rollout_tab:
-        "Att rollout tab"
+            for i, example in enumerate(rerank_dialog_examples, start=1):
+                show_annotated_psg(example["passage"], i, example["label"])
 
-    with raw_att_tab:
-        "Raw attention tab"
+        with att_rollout_tab:
+            "Att rollout tab"
+
+        with raw_att_tab:
+            "Raw attention tab"
