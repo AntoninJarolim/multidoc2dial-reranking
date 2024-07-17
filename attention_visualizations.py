@@ -157,7 +157,8 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
                     else:
                         text_tokens = split_to_tokens(text)
                         for token in text_tokens:
-                            coloured_passage.append((token, "", colour))
+                            token = token.replace('$', '\$')
+                            coloured_passage.append((token, "cha", colour))
 
                 annotated_text(coloured_passage)
             else:
@@ -223,34 +224,35 @@ with (explaining):
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
         with att_rollout_tab:
+            pass
             "Attention rollout tab"
             max_to_rerank = 32
             rerank_dialog_examples = rerank_dialog_examples[:max_to_rerank]
-
+            #
             pre_examples = []
             for example in [x.copy() for x in rerank_dialog_examples]:
                 pre_example = preprocess_example_(example, tokenizer, 512)
                 pre_examples.append(pre_example)
-
+            #
             cross_encoder.to(device)
 
             batch = utils.transform_batch(pre_examples, 0)
             batch = {k: v.to(device) for k, v in batch.items()}
             pred = cross_encoder.process_large_batch(batch, max_to_rerank)
-
+            #
             # Mean across heads
             att_weights = [torch.mean(t, dim=1) for t in cross_encoder.acc_attention_weights[0]]
-
+            #
             batched_rollout = []
             for r in range(max_to_rerank):
                 rollout = attention_rollout(att_weights, r)
                 CLS_token_rollout = rollout[0, :]
                 batched_rollout.append(CLS_token_rollout)
-
-            for example, rollout in zip(rerank_dialog_examples, batched_rollout):
+            
+            for idx, (example, rollout) in enumerate(zip(rerank_dialog_examples, batched_rollout), start=1):
                 psg = split_to_tokens(example["passage"])
                 rollout = rollout[1:][:-1][:len(psg)]
-                show_annotated_psg(psg, example["label"],
+                show_annotated_psg(psg, idx, is_grounding=example["label"],
                                    annotation_list=rollout, base_colour="green")
 
         with raw_att_tab:
