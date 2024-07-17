@@ -158,14 +158,11 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
                         text_tokens = split_to_tokens(text)
                         for token in text_tokens:
                             token = token.replace('$', '\$')
-                            coloured_passage.append((token, "cha", colour))
+                            coloured_passage.append((token, "", colour))
 
                 annotated_text(coloured_passage)
             else:
                 passage_text
-        # annotated_text
-        #     (passage_text, "", set_data["gt_label_colour"]),
-        # )
 
 
 def create_grounding_annt_list(passage, grounded_agent_utterance, label):
