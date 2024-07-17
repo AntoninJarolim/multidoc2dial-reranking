@@ -180,8 +180,9 @@ def create_dialog_example_data():
             new_utterance = utterance_history.split("user: ")[0]
             dialog = find_dialog(new_utterance, dialog_data)
             print("Found dialog with two user utterance in row.")
+
         paired_data.append({
-            "to_rerank": rerank_items[:15],
+            "to_rerank": rerank_items,
             "full_passage": passage,
             "dialog": dialog,
         })
