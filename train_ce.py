@@ -236,9 +236,10 @@ class CrossEncoder(torch.nn.Module):
         return merged_preds
 
     def accumulate_attention_weights(self):
-        cpu_copy_weights = [layer.cpu() for layer in self.last_attention_weights]
+        cpu_copy_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
         self.acc_attention_weights.append(cpu_copy_weights)
-        pass
+        del self.last_attention_weights
+        self.last_attention_weights = None
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):
