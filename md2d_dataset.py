@@ -19,6 +19,18 @@ def break_to_pair(sentence):
     return res[0], res[1]
 
 
+def preprocess_example(obj, tokenizer, model_max_length):
+    pair = break_to_pair(obj['x'])
+    tokenized = tokenizer(pair[0], pair[1],
+                          return_tensors="pt", padding="max_length",
+                          truncation=True, max_length=model_max_length)
+    obj['in_ids'] = tokenized["input_ids"][0].tolist()
+    obj['att_mask'] = tokenized["attention_mask"][0].tolist()
+    obj['tt_ids'] = tokenized["token_type_ids"][0].tolist()
+    del obj['x']
+    return obj
+
+
 class MD2DDataset(IterableDataset):
     def __init__(self, data_path, tokenizer_name, shuffle=False, retokenize=False, label_smoothing=0):
         super(MD2DDataset).__init__()
@@ -55,22 +67,11 @@ class MD2DDataset(IterableDataset):
                 if type(obj) is list:
                     tokenized = []
                     for o in obj:
-                        tokenized.append(self.preprocess_example(o, tokenizer))
+                        tokenized.append(preprocess_example(o, tokenizer, self.model_max_length))
                     outfile.write(tokenized)
                 else:
-                    self.preprocess_example(obj, tokenizer)
+                    preprocess_example(obj, tokenizer, self.model_max_length)
                     outfile.write(obj)
-
-    def preprocess_example(self, obj, tokenizer):
-        pair = break_to_pair(obj['x'])
-        tokenized = tokenizer(pair[0], pair[1],
-                              return_tensors="pt", padding="max_length",
-                              truncation=True, max_length=self.model_max_length)
-        obj['in_ids'] = tokenized["input_ids"][0].tolist()
-        obj['att_mask'] = tokenized["attention_mask"][0].tolist()
-        obj['tt_ids'] = tokenized["token_type_ids"][0].tolist()
-        del obj['x']
-        return obj
 
     def index_dataset(self):
         """

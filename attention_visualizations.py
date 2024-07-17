@@ -7,6 +7,9 @@ from annotated_text import annotated_text
 from streamlit_chat import message
 from transformers import AutoTokenizer
 
+import utils
+from train_ce import CrossEncoder
+
 st.set_page_config(layout="wide")
 
 # Layout config
@@ -17,6 +20,8 @@ data = np.random.randn(10, 1)
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
+cross_encoder = CrossEncoder(model_name)
+model = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
 
 
 @st.cache_data
@@ -192,8 +197,8 @@ with (explaining):
                                                                            example["label"])
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
-                with att_rollout_tab:
-                    "Att rollout tab"
+        with att_rollout_tab:
 
-                with raw_att_tab:
-                    "Raw attention tab"
+
+        with raw_att_tab:
+            "Raw attention tab"
