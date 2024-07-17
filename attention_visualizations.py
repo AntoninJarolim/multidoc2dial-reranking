@@ -21,12 +21,19 @@ data = np.random.randn(10, 1)
 # DATA
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-cross_encoder = CrossEncoder(model_name)
-cross_encoder.save_attention_weights = True
-cross_encoder.bert_model.config.output_attentions = True
-cross_encoder = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
-cross_encoder.eval()
+
+@st.cache_data
+def init_model():
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    cross_encoder = CrossEncoder(model_name)
+    cross_encoder.save_attention_weights = True
+    cross_encoder.bert_model.config.output_attentions = True
+    cross_encoder = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
+    cross_encoder.eval()
+    return cross_encoder, tokenizer
+
+
+cross_encoder, tokenizer = init_model()
 
 
 @st.cache_data
@@ -103,14 +110,23 @@ with chat:
 
 
 # RIGHT SECTION EXPLAINING features
-def annt_list_2_colours(annotation_list, base_colour):
+def annt_list_2_colours(annotation_list, base_colour, colours):
     assert base_colour in ["blue", "red", "green"], f"Base colour {base_colour} not supported"
 
     # Normalize annotation list and conver to ints (0-255)
-    tensor_list = torch.tensor(annotation_list)
-    normalized_tensor_list = tensor_list / torch.sum(tensor_list)
-    normalized_tensor_list = normalized_tensor_list / torch.max(normalized_tensor_list)
+    tensor_list = torch.tensor(annotation_list).type(torch.float)
+    print(tensor_list)
+    # from torch.nn.functional import normalize
+    # normalized_tensor_list = normalize(tensor_list, dim=0, p=1.0) 
+    normalized_tensor_list = tensor_list / torch.max(tensor_list)
+    print(normalized_tensor_list)
+    if colours == "nonlinear":
+        transf_list = -torch.log(normalized_tensor_list)
+        normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
+        print(f"transformed: {normalized_tensor_list}")
+    
     colour_range = (normalized_tensor_list * 255).type(torch.int64)
+    print(colour_range)
 
     assert 0 <= torch.min(colour_range), f"min: Conversion of {torch.min(colour_range)} to colour range failed"
     assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
@@ -132,7 +148,7 @@ def annt_list_2_colours(annotation_list, base_colour):
             for x in coloured_list]
 
 
-def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=None, base_colour="blue"):
+def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=None, base_colour="blue", colours="linear"):
     """
     :param passage_text: string if annotation_list is None, else list of strings of same length as annotation_list
     :param annotation_list: list of numbers used to colour the passage_text
@@ -149,11 +165,11 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
 
         with passage_col:
             if annotation_list is not None:
-                colours_annotation_list = annt_list_2_colours(annotation_list, base_colour)
+                colours_annotation_list = annt_list_2_colours(annotation_list, base_colour, colours)
                 coloured_passage = []
                 for colour, text in zip(colours_annotation_list, passage_text):
                     if colour is None:
-                        coloured_passage.append(text)
+                        coloured_passage.append(text.replace('$', '\$'))
                     else:
                         text_tokens = split_to_tokens(text)
                         for token in text_tokens:
@@ -162,6 +178,7 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
 
                 annotated_text(coloured_passage)
             else:
+                passage_text = passage_text.replace('$', '\$')
                 passage_text
 
 
@@ -208,10 +225,10 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
 
 with (explaining):
     "### Reranked results and attention visualizations"
-    with st.container(height=800):
-        gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
+    gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
 
-        with gt_tab:
+    with gt_tab:
+        with st.container(height=800):
             gt_label = "GT"
 
             for i, example in enumerate(rerank_dialog_examples, start=1):
@@ -220,9 +237,8 @@ with (explaining):
                                                                            example["label"])
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
-        with att_rollout_tab:
-            pass
-            "Attention rollout tab"
+    with att_rollout_tab:
+        try:
             max_to_rerank = 32
             rerank_dialog_examples = rerank_dialog_examples[:max_to_rerank]
             #
@@ -246,11 +262,35 @@ with (explaining):
                 CLS_token_rollout = rollout[0, :]
                 batched_rollout.append(CLS_token_rollout)
             
-            for idx, (example, rollout) in enumerate(zip(rerank_dialog_examples, batched_rollout), start=1):
-                psg = split_to_tokens(example["passage"])
-                rollout = rollout[1:][:-1][:len(psg)]
-                show_annotated_psg(psg, idx, is_grounding=example["label"],
-                                   annotation_list=rollout, base_colour="green")
+            sorted_indexes = torch.argsort(pred, descending=True)
+            print(pred)
+            print(sorted_indexes)
+            reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
+            reranked_rollouts = [batched_rollout[i] for i in sorted_indexes]
 
-        with raw_att_tab:
-            "Raw attention tab"
+            def visualize_rollout(colours="linear"):
+                for idx, (example, rollout) in enumerate(zip(reranked_examples, reranked_rollouts), start=1):
+                    psg = split_to_tokens(example["passage"])
+                    rollout = rollout[1:][:-1][:len(psg)]
+                    show_annotated_psg(psg, idx, is_grounding=example["label"],
+                                       annotation_list=rollout, base_colour="green", colours=colours)
+
+            linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
+            with linear_tab:
+                with st.container(height=800):
+                    visualize_rollout(colours="linear")
+            
+            with not_linear_tab:
+                with st.container(height=800):
+                    visualize_rollout(colours="nonlinear")
+
+        finally:
+                del batch
+                del pre_examples
+                del pred
+                del att_weights
+                del batched_rollout
+                torch.cuda.empty_cache()
+
+    with raw_att_tab:
+        "Raw attention tab"
