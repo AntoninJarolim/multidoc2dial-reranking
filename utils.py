@@ -82,10 +82,10 @@ def transform_batch(batch, take_n=0):
     if take_n > 0:
         batch = batch[:take_n]
     # Gather 'label', 'in_ids', and 'att_mask' from these members
-    labels = torch.vstack([item['label'] for item in batch]).flatten()
-    in_ids = torch.vstack([item['in_ids'] for item in batch])
-    att_masks = torch.vstack([item['att_mask'] for item in batch])
-    tt_ids = torch.vstack([item['tt_ids'] for item in batch])
+    labels = torch.vstack([torch.tensor(item['label']) for item in batch]).flatten()
+    in_ids = torch.vstack([torch.tensor(item['in_ids']) for item in batch])
+    att_masks = torch.vstack([torch.tensor(item['att_mask']) for item in batch])
+    tt_ids = torch.vstack([torch.tensor(item['tt_ids']) for item in batch])
 
     # Combine into a dictionary as expected by your code
     return {
@@ -132,6 +132,7 @@ def calc_physical_batch_size(batch_size, gpu_batches=None):
 def load_model(cross_encoder, load_path):
     cross_encoder.load_state_dict(torch.load(load_path))
     logger.info(f"Model loaded successfully from {load_path}")
+    return cross_encoder
 
 
 def save_model(cross_encoder, save_model_path, msg_str=None):

@@ -19,7 +19,7 @@ def break_to_pair(sentence):
     return res[0], res[1]
 
 
-def preprocess_example(obj, tokenizer, model_max_length):
+def preprocess_example_(obj, tokenizer, model_max_length):
     pair = break_to_pair(obj['x'])
     tokenized = tokenizer(pair[0], pair[1],
                           return_tensors="pt", padding="max_length",
@@ -67,10 +67,10 @@ class MD2DDataset(IterableDataset):
                 if type(obj) is list:
                     tokenized = []
                     for o in obj:
-                        tokenized.append(preprocess_example(o, tokenizer, self.model_max_length))
+                        tokenized.append(preprocess_example_(o, tokenizer, self.model_max_length))
                     outfile.write(tokenized)
                 else:
-                    preprocess_example(obj, tokenizer, self.model_max_length)
+                    preprocess_example_(obj, tokenizer, self.model_max_length)
                     outfile.write(obj)
 
     def index_dataset(self):

@@ -8,9 +8,11 @@ from streamlit_chat import message
 from transformers import AutoTokenizer
 
 import utils
+from md2d_dataset import preprocess_example_
 from train_ce import CrossEncoder
 
 st.set_page_config(layout="wide")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Layout config
 chat, _, explaining = st.columns([6, 1, 6])
@@ -21,7 +23,10 @@ EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 cross_encoder = CrossEncoder(model_name)
-model = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
+cross_encoder.save_attention_weights = True
+cross_encoder.bert_model.config.output_attentions = True
+cross_encoder = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
+cross_encoder.eval()
 
 
 @st.cache_data
@@ -40,6 +45,25 @@ def split_utterance_history(raw_rarank_data):
         "utterance_history": x["x"].split("[SEP]")[0],
         "passage": x["x"].split("[SEP]")[1]
     }, raw_rarank_data))
+
+
+def attention_rollout(attentions, r):
+    """Computes attention rollout from the given list of attention matrices.
+    https://arxiv.org/abs/2005.00928
+    """
+    # Get matrix from each layer of corresponding batch
+    As = []
+    for l in range(len(attentions)):
+        As.append(attentions[l][r])
+
+    rollout = As[0]
+    for A in As[1:]:
+        rollout = torch.matmul(
+            0.5 * A + 0.5 * torch.eye(A.shape[1], device=A.device),
+            rollout
+        )
+
+    return rollout
 
 
 data_dialogues = get_data()
@@ -88,14 +112,15 @@ def annt_list_2_colours(annotation_list, base_colour):
     normalized_tensor_list = normalized_tensor_list / torch.max(normalized_tensor_list)
     colour_range = (normalized_tensor_list * 255).type(torch.int64)
 
-    assert torch.max(colour_range) < 256 and 0 >= torch.min(colour_range), "Conversion to colour range failed"
+    assert 0 <= torch.min(colour_range), f"min: Conversion of {torch.min(colour_range)} to colour range failed"
+    assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
 
     if base_colour == "blue":
         def conv_fce(x):
             return f'#1111{x:02x}'
     elif base_colour == "green":
         def conv_fce(x):
-            return f'#00{x:02x}00'
+            return f'#11{x:02x}11'
     elif base_colour == "red":
         def conv_fce(x):
             return f'#{x:02x}0000'
@@ -103,11 +128,11 @@ def annt_list_2_colours(annotation_list, base_colour):
         raise ValueError(f"Base colour {base_colour} not supported")
 
     coloured_list = [conv_fce(x) for x in colour_range]
-    return [x if x not in ["#000000", "#111100"] else None
+    return [x if x not in ["#000000", "#111100", "#11011"] else None
             for x in coloured_list]
 
 
-def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=None):
+def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=None, base_colour="blue"):
     """
     :param passage_text: string if annotation_list is None, else list of strings of same length as annotation_list
     :param annotation_list: list of numbers used to colour the passage_text
@@ -123,8 +148,8 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
                 st.subheader(idx)
 
         with passage_col:
-            if annotation_list:
-                colours_annotation_list = annt_list_2_colours(annotation_list, "blue")
+            if annotation_list is not None:
+                colours_annotation_list = annt_list_2_colours(annotation_list, base_colour)
                 coloured_passage = []
                 for colour, text in zip(colours_annotation_list, passage_text):
                     if colour is None:
@@ -198,7 +223,35 @@ with (explaining):
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
         with att_rollout_tab:
+            "Attention rollout tab"
+            max_to_rerank = 32
+            rerank_dialog_examples = rerank_dialog_examples[:max_to_rerank]
 
+            pre_examples = []
+            for example in [x.copy() for x in rerank_dialog_examples]:
+                pre_example = preprocess_example_(example, tokenizer, 512)
+                pre_examples.append(pre_example)
+
+            cross_encoder.to(device)
+
+            batch = utils.transform_batch(pre_examples, 0)
+            batch = {k: v.to(device) for k, v in batch.items()}
+            pred = cross_encoder.process_large_batch(batch, max_to_rerank)
+
+            # Mean across heads
+            att_weights = [torch.mean(t, dim=1) for t in cross_encoder.acc_attention_weights[0]]
+
+            batched_rollout = []
+            for r in range(max_to_rerank):
+                rollout = attention_rollout(att_weights, r)
+                CLS_token_rollout = rollout[0, :]
+                batched_rollout.append(CLS_token_rollout)
+
+            for example, rollout in zip(rerank_dialog_examples, batched_rollout):
+                psg = split_to_tokens(example["passage"])
+                rollout = rollout[1:][:-1][:len(psg)]
+                show_annotated_psg(psg, example["label"],
+                                   annotation_list=rollout, base_colour="green")
 
         with raw_att_tab:
             "Raw attention tab"

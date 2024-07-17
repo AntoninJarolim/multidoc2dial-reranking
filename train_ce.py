@@ -127,6 +127,10 @@ class CrossEncoder(torch.nn.Module):
         self.classifier.weight = m.classifier.weight
         self.classifier.bias = m.classifier.bias
 
+        self.save_attention_weights = False  # Whether to save attention weights during evaluation
+        self.last_attention_weights = None
+        self.acc_attention_weights = None
+
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         cls_features = self.get_cls_features(input_ids, attention_mask, token_type_ids)
         cls_features = self.dropout(cls_features)
@@ -144,6 +148,11 @@ class CrossEncoder(torch.nn.Module):
             # Deberta model doesnt do pooling automatically
             encoder_layer = outputs[0]
             pooled_output = self.pooler(encoder_layer)
+
+            # Save attention weights
+            if self.save_attention_weights:
+                self.last_attention_weights = outputs[2]
+
             return pooled_output
         else:
             assert isinstance(self.bert_model, BertModel)
@@ -204,7 +213,9 @@ class CrossEncoder(torch.nn.Module):
         self.train()
         return EvaluationMetrics(average_mrr, sum_recalls, loss_total, loss_negative, loss_positive, sm_loss_sum)
 
+    @torch.no_grad()
     def process_large_batch(self, batch, max_sub_batch_size):
+        self.acc_attention_weights = []
         # Split the batch into smaller sub-batches
         input_ids = batch['in_ids']
         attention_mask = batch['att_mask']
@@ -218,10 +229,16 @@ class CrossEncoder(torch.nn.Module):
                             attention_mask=attention_mask[i:i + max_sub_batch_size],
                             token_type_ids=token_type_ids[i:i + max_sub_batch_size])
             preds.append(sub_pred)
+            self.accumulate_attention_weights()
 
         # Merge predictions back
         merged_preds = torch.cat(preds, dim=0)
         return merged_preds
+
+    def accumulate_attention_weights(self):
+        cpu_copy_weights = [layer.cpu() for layer in self.last_attention_weights]
+        self.acc_attention_weights.append(cpu_copy_weights)
+        pass
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):
