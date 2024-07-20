@@ -82,10 +82,10 @@ def transform_batch(batch, take_n=0):
     if take_n > 0:
         batch = batch[:take_n]
     # Gather 'label', 'in_ids', and 'att_mask' from these members
-    labels = torch.vstack([torch.tensor(item['label']) for item in batch]).flatten()
-    in_ids = torch.vstack([torch.tensor(item['in_ids']) for item in batch])
-    att_masks = torch.vstack([torch.tensor(item['att_mask']) for item in batch])
-    tt_ids = torch.vstack([torch.tensor(item['tt_ids']) for item in batch])
+    labels = torch.vstack([item['label'] for item in batch]).flatten()
+    in_ids = torch.vstack([item['in_ids'] for item in batch])
+    att_masks = torch.vstack([item['att_mask'] for item in batch])
+    tt_ids = torch.vstack([item['tt_ids'] for item in batch])
 
     # Combine into a dictionary as expected by your code
     return {
@@ -143,3 +143,29 @@ def save_model(cross_encoder, save_model_path, msg_str=None):
 
 def save_best_model(cross_encoder, save_model_path):
     save_model(cross_encoder, save_model_path, "New best saved to ")
+
+
+from torch.utils.data import DataLoader, Dataset
+import itertools
+
+class LimitedDataLoader:
+    def __init__(self, dataloader, max_iterations):
+        self.dataloader = dataloader
+        self.max_iterations = max_iterations
+
+    def __iter__(self):
+        self.iter_loader = iter(self.dataloader)
+        self.counter = 0
+        return self
+
+    def __next__(self):
+        if self.counter < self.max_iterations:
+            self.counter += 1
+            return next(self.iter_loader)
+        else:
+            raise StopIteration
+
+    def __len__(self):
+        return min(self.max_iterations, len(self.dataloader))
+
+

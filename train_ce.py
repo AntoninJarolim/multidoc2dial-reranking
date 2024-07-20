@@ -236,6 +236,8 @@ class CrossEncoder(torch.nn.Module):
         return merged_preds
 
     def accumulate_attention_weights(self):
+        if self.save_attention_weights == False:
+            return 
         cpu_copy_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
         self.acc_attention_weights.append(cpu_copy_weights)
         del self.last_attention_weights
@@ -399,6 +401,12 @@ def training_loop(cross_encoder,
     steps_per_epoch = len(train_loader) * batch_size
     logger.info(f"Test data len: {len(test_loader)}")
 
+    DEBUG = False
+    if DEBUG:
+        from utils import LimitedDataLoader
+        test_loader = LimitedDataLoader(test_loader, 20)
+        train_loader = LimitedDataLoader(train_loader, 500)
+
     # Optimizer initialization
     optimizer = optimizer or AdamW(cross_encoder.parameters(), lr=lr, weight_decay=weight_decay)
     optimizer.zero_grad()
@@ -474,6 +482,17 @@ def training_loop(cross_encoder,
         # stopping based on max time to train
         if stop_time is not None and time.time() - start_t > stop_time:
             break
+
+        # Checkpointing
+        
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': cross_encoder.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'tracker': best_metric_tracker,
+            }, "checkpoint.pt")
+
 
     # val_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_validation.jsonl',
     #                           bert_model_name)
