@@ -78,14 +78,24 @@ def compute_recall(path, ks):
     return sum_recalls
 
 
-def transform_batch(batch, take_n=0):
+def transform_batch(batch, take_n=0, device=None):
     if take_n > 0:
         batch = batch[:take_n]
+
+    # Transform each item and make it tensor if not already
+    def get_value_tensor(source_item, key):
+        value_out = source_item[key]
+        if not isinstance(value_out, list):
+            value_out = [value_out]
+        if not isinstance(value_out, torch.Tensor):
+            value_out = torch.tensor(value_out, device=device)
+        return value_out
+
     # Gather 'label', 'in_ids', and 'att_mask' from these members
-    labels = torch.vstack([item['label'] for item in batch]).flatten()
-    in_ids = torch.vstack([item['in_ids'] for item in batch])
-    att_masks = torch.vstack([item['att_mask'] for item in batch])
-    tt_ids = torch.vstack([item['tt_ids'] for item in batch])
+    labels = torch.vstack([get_value_tensor(item, 'label') for item in batch]).flatten()
+    in_ids = torch.vstack([get_value_tensor(item, 'in_ids') for item in batch])
+    att_masks = torch.vstack([get_value_tensor(item, 'att_mask') for item in batch])
+    tt_ids = torch.vstack([get_value_tensor(item, 'tt_ids') for item in batch])
 
     # Combine into a dictionary as expected by your code
     return {
@@ -145,9 +155,6 @@ def save_best_model(cross_encoder, save_model_path):
     save_model(cross_encoder, save_model_path, "New best saved to ")
 
 
-from torch.utils.data import DataLoader, Dataset
-import itertools
-
 class LimitedDataLoader:
     def __init__(self, dataloader, max_iterations):
         self.dataloader = dataloader
@@ -167,5 +174,3 @@ class LimitedDataLoader:
 
     def __len__(self):
         return min(self.max_iterations, len(self.dataloader))
-
-

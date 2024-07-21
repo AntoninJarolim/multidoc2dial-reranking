@@ -124,18 +124,12 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
 
     # Normalize annotation list and conver to ints (0-255)
     tensor_list = torch.tensor(annotation_list).type(torch.float)
-    print(tensor_list)
-    # from torch.nn.functional import normalize
-    # normalized_tensor_list = normalize(tensor_list, dim=0, p=1.0) 
     normalized_tensor_list = tensor_list / torch.max(tensor_list)
-    print(normalized_tensor_list)
     if colours == "nonlinear":
         transf_list = -torch.log(normalized_tensor_list)
         normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
-        print(f"transformed: {normalized_tensor_list}")
 
     colour_range = (normalized_tensor_list * 255).type(torch.int64)
-    print(colour_range)
 
     assert 0 <= torch.min(colour_range), f"min: Conversion of {torch.min(colour_range)} to colour range failed"
     assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
@@ -157,8 +151,14 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
             for x in coloured_list]
 
 
-def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=None, base_colour="blue",
-                       colours="linear", score=None):
+def show_annotated_psg(passage_text, idx,
+                       is_grounding=False,
+                       annotation_list=None,
+                       base_colour="blue",
+                       colours="linear",
+                       score=None,
+                       hide_attention_colours=False,
+                       ):
     """
     :param passage_text: string if annotation_list is None, else list of strings of same length as annotation_list
     :param annotation_list: list of numbers used to colour the passage_text
@@ -187,7 +187,10 @@ def show_annotated_psg(passage_text, idx, is_grounding=False, annotation_list=No
                         text_tokens = split_to_tokens(text)
                         for token in text_tokens:
                             token = token.replace('$', '\$')
-                            coloured_passage.append((token, "", colour))
+                            if hide_attention_colours:
+                                coloured_passage.append(token + " ")
+                            else:
+                                coloured_passage.append((token, "", colour))
 
                 annotated_text(coloured_passage)
             else:
@@ -210,12 +213,7 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
             broken_passage.append(ref_span)
             break
 
-        try:
-            before, after = passage.split(ref_span)
-        except ValueError:
-            print(f"Passage: {passage}")
-            print(f"Ref span: {ref_span}")
-            exit(6)
+        before, after = passage.split(ref_span)
 
         # Found reference is not at the beginning of the passage
         if before != "":
@@ -254,21 +252,18 @@ with (explaining):
         try:
             max_to_rerank = 32
             rerank_dialog_examples = rerank_dialog_examples[:max_to_rerank]
-            #
             pre_examples = []
             for example in [x.copy() for x in rerank_dialog_examples]:
                 pre_example = preprocess_example_(example, tokenizer, 512)
                 pre_examples.append(pre_example)
-            #
             cross_encoder.to(device)
 
-            batch = utils.transform_batch(pre_examples, 0)
+            batch = utils.transform_batch(pre_examples, 0, device=device)
             batch = {k: v.to(device) for k, v in batch.items()}
             pred = cross_encoder.process_large_batch(batch, max_to_rerank)
-            #
+
             # Mean across heads
             att_weights = [torch.mean(t, dim=1) for t in cross_encoder.acc_attention_weights[0]]
-            #
             batched_rollout = []
             for r in range(max_to_rerank):
                 rollout = attention_rollout(att_weights, r)
@@ -276,8 +271,6 @@ with (explaining):
                 batched_rollout.append(CLS_token_rollout)
 
             sorted_indexes = torch.argsort(pred, descending=True)
-            print(pred)
-            print(sorted_indexes)
             reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
             reranked_rollouts = [batched_rollout[i] for i in sorted_indexes]
             preds = [pred[i] for i in sorted_indexes]
@@ -291,7 +284,8 @@ with (explaining):
                     rollout = rollout[1:][:-1][:len(psg)]
                     show_annotated_psg(psg, idx, is_grounding=example["label"],
                                        annotation_list=rollout, base_colour="green",
-                                       colours=colours, score=score)
+                                       colours=colours, score=score,
+                                       hide_attention_colours=set_data["hide_attention_colours"])
 
 
             linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
@@ -304,7 +298,7 @@ with (explaining):
                     visualize_rollout(colours="nonlinear")
 
         finally:
-            del batch, pre_examples, pred, att_weights, batched_rollout
+            del batch, pre_examples, pred, preds, att_weights, batched_rollout
             torch.cuda.empty_cache()
 
     with raw_att_tab:
