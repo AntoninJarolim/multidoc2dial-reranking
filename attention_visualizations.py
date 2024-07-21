@@ -8,7 +8,7 @@ from streamlit_chat import message
 from transformers import AutoTokenizer
 
 import utils
-from md2d_dataset import preprocess_example_
+from md2d_dataset import preprocess_examples
 from train_ce import CrossEncoder
 
 st.set_page_config(layout="wide")
@@ -30,6 +30,7 @@ def init_model():
     cross_encoder.save_attention_weights = True
     cross_encoder.bert_model.config.output_attentions = True
     cross_encoder = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
+    cross_encoder.to(device)
     cross_encoder.eval()
     return cross_encoder, tokenizer
 
@@ -253,14 +254,8 @@ with (explaining):
     with att_rollout_tab:
         try:
             max_to_rerank = 32
-            rerank_dialog_examples = rerank_dialog_examples[:max_to_rerank]
-            pre_examples = []
-            for example in [x.copy() for x in rerank_dialog_examples]:
-                pre_example = preprocess_example_(example, tokenizer, 512)
-                pre_examples.append(pre_example)
-            cross_encoder.to(device)
-
-            batch = utils.transform_batch(pre_examples, 0, device=device)
+            pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
+            batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
             pred = cross_encoder.process_large_batch(batch, max_to_rerank)
 
             # Mean across heads

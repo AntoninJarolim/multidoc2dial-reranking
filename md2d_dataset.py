@@ -19,6 +19,14 @@ def break_to_pair(sentence):
     return res[0], res[1]
 
 
+def preprocess_examples(examples, tokenizer, model_max_length):
+    preprocessed_examples = []
+    for example in [x.copy() for x in examples]:
+        pre_example = preprocess_example_(example, tokenizer, model_max_length)
+        preprocessed_examples.append(pre_example)
+    return preprocessed_examples
+
+
 def preprocess_example_(obj, tokenizer, model_max_length):
     pair = break_to_pair(obj['x'])
     tokenized = tokenizer(pair[0], pair[1],
