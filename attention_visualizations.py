@@ -261,7 +261,6 @@ with (explaining):
             cross_encoder.to(device)
 
             batch = utils.transform_batch(pre_examples, 0, device=device)
-            batch = {k: v.to(device) for k, v in batch.items()}
             pred = cross_encoder.process_large_batch(batch, max_to_rerank)
 
             # Mean across heads
