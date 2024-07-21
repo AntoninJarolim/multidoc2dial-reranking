@@ -129,7 +129,6 @@ class CrossEncoder(torch.nn.Module):
 
         self.save_attention_weights = False  # Whether to save attention weights during evaluation
         self.last_attention_weights = None
-        self.acc_attention_weights = None
 
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         cls_features = self.get_cls_features(input_ids, attention_mask, token_type_ids)
@@ -215,7 +214,6 @@ class CrossEncoder(torch.nn.Module):
 
     @torch.no_grad()
     def process_large_batch(self, batch, max_sub_batch_size):
-        self.acc_attention_weights = []
         # Split the batch into smaller sub-batches
         input_ids = batch['in_ids']
         attention_mask = batch['att_mask']
@@ -229,19 +227,16 @@ class CrossEncoder(torch.nn.Module):
                             attention_mask=attention_mask[i:i + max_sub_batch_size],
                             token_type_ids=token_type_ids[i:i + max_sub_batch_size])
             preds.append(sub_pred)
-            self.accumulate_attention_weights()
 
         # Merge predictions back
         merged_preds = torch.cat(preds, dim=0)
         return merged_preds
 
-    def accumulate_attention_weights(self):
-        if self.save_attention_weights == False:
-            return 
-        cpu_copy_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
-        self.acc_attention_weights.append(cpu_copy_weights)
-        del self.last_attention_weights
-        self.last_attention_weights = None
+    def get_attention_weights(self):
+        if not self.save_attention_weights:
+            return
+        self.last_attention_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
+        return self.last_attention_weights
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):
@@ -484,15 +479,14 @@ def training_loop(cross_encoder,
             break
 
         # Checkpointing
-        
+
         torch.save({
             'epoch': epoch,
             'model_state_dict': cross_encoder.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
             'tracker': best_metric_tracker,
-            }, "checkpoint.pt")
-
+        }, "checkpoint.pt")
 
     # val_dataset = MD2DDataset('data/DPR_pairs/DPR_pairs_validation.jsonl',
     #                           bert_model_name)

@@ -122,9 +122,11 @@ with chat:
 def annt_list_2_colours(annotation_list, base_colour, colours):
     assert base_colour in ["blue", "red", "green"], f"Base colour {base_colour} not supported"
 
-    # Normalize annotation list and conver to ints (0-255)
-    tensor_list = torch.tensor(annotation_list).type(torch.float)
-    normalized_tensor_list = tensor_list / torch.max(tensor_list)
+    # Normalize annotation list and convert to ints (0-255)
+    if not isinstance(annotation_list, torch.Tensor):
+        annotation_list = torch.Tensor(annotation_list)
+
+    normalized_tensor_list = annotation_list / torch.max(annotation_list)
     if colours == "nonlinear":
         transf_list = -torch.log(normalized_tensor_list)
         normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
@@ -263,13 +265,14 @@ with (explaining):
             pred = cross_encoder.process_large_batch(batch, max_to_rerank)
 
             # Mean across heads
-            att_weights = [torch.mean(t, dim=1) for t in cross_encoder.acc_attention_weights[0]]
+            att_weights = [torch.mean(t, dim=1) for t in cross_encoder.get_attention_weights()]
             batched_rollout = []
             for r in range(max_to_rerank):
                 rollout = attention_rollout(att_weights, r)
                 CLS_token_rollout = rollout[0, :]
                 batched_rollout.append(CLS_token_rollout)
 
+            # Reranking based on prediction scores
             sorted_indexes = torch.argsort(pred, descending=True)
             reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
             reranked_rollouts = [batched_rollout[i] for i in sorted_indexes]
