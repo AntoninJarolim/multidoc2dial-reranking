@@ -235,7 +235,9 @@ class CrossEncoder(torch.nn.Module):
     def get_attention_weights(self):
         if not self.save_attention_weights:
             return
-        self.last_attention_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
+        # self.last_attention_weights is tuple of layers
+        cpu_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
+        self.last_attention_weights = torch.stack(cpu_weights)
         return self.last_attention_weights
 
 

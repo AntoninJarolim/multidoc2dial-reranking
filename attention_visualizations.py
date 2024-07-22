@@ -8,6 +8,7 @@ from streamlit_chat import message
 from transformers import AutoTokenizer
 
 import utils
+from interpretability import attention_rollout
 from md2d_dataset import preprocess_examples
 from train_ce import CrossEncoder
 
@@ -56,70 +57,10 @@ def split_utterance_history(raw_rarank_data):
     }, raw_rarank_data))
 
 
-def attention_rollout(attentions, r):
-    """Computes attention rollout from the given list of attention matrices.
-    https://arxiv.org/abs/2005.00928
-    """
-    # Get matrix from each layer of corresponding batch
-    As = []
-    for l in range(len(attentions)):
-        As.append(attentions[l][r])
-
-    rollout = As[0]
-    for A in As[1:]:
-        rollout = torch.matmul(
-            0.5 * A + 0.5 * torch.eye(A.shape[1], device=A.device),
-            rollout
-        )
-
-    return rollout
+def mean_attention_heads(attentions_heads):
+    return torch.mean(attentions_heads, dim=2)
 
 
-data_dialogues = get_data()
-
-# This variables will be set in configuration sidebar
-set_data = {
-    "current_dialogue": 0,
-    "gt_label_colour": "#2222DD",
-    "show_explanations": False,
-    "show_relevance_score": False,
-    "hide_attention_colours": False,
-}
-
-# CONFIGURATION SIDEBAR
-with st.sidebar:
-    "## Configuration"
-    "### Dialog loading"
-    dialogue_index = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
-    set_data["current_dialogue"] = dialogue_index
-
-    "### Togglers"
-    set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
-    set_data["show_relevance_score"] = st.toggle("Show relevance score", set_data["show_relevance_score"])
-    set_data["hide_attention_colours"] = st.toggle("Hide attention colours", set_data["hide_attention_colours"])
-
-selected_dialog = data_dialogues[set_data["current_dialogue"]]
-diag_turns = selected_dialog["dialog"]["turns"]
-rerank_dialog_examples = split_utterance_history(selected_dialog["to_rerank"])
-utterance_history, passage = [(d["utterance_history"], d["passage"])
-                              for d in rerank_dialog_examples
-                              if d["label"] == 1][0]
-last_user_utterance = utterance_history.split("agent: ")[0]
-last_user_utterance_id = [t['turn_id'] for t in diag_turns if t["utterance"] == last_user_utterance][0]
-grounded_agent_utterance_id = last_user_utterance_id  # Ids stats from 1 and agent utterance is the next after user
-grounded_agent_utterance = diag_turns[grounded_agent_utterance_id]
-nr_show_utterances = grounded_agent_utterance_id + 1
-
-# MID SECTION CHAT
-with chat:
-    for utterance in diag_turns[:nr_show_utterances]:
-        is_user = True if utterance["role"] == "user" else False
-        message(f"{utterance['utterance']}", is_user=is_user)
-
-    st.chat_input("Say something")
-
-
-# RIGHT SECTION EXPLAINING features
 def annt_list_2_colours(annotation_list, base_colour, colours):
     assert base_colour in ["blue", "red", "green"], f"Base colour {base_colour} not supported"
 
@@ -237,6 +178,64 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
     return broken_passage, annotation_list
 
 
+data_dialogues = get_data()
+
+# This variables will be set in configuration sidebar
+set_data = {
+    "current_dialogue": 0,
+    "gt_label_colour": "#2222DD",
+    "show_explanations": False,
+    "show_relevance_score": False,
+    "hide_attention_colours": False,
+}
+
+# CONFIGURATION SIDEBAR
+with st.sidebar:
+    "## Configuration"
+    "### Dialog loading"
+    dialogue_index = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
+    set_data["current_dialogue"] = dialogue_index
+
+    "### Togglers"
+    set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
+    set_data["show_relevance_score"] = st.toggle("Show relevance score", set_data["show_relevance_score"])
+    set_data["hide_attention_colours"] = st.toggle("Hide attention colours", set_data["hide_attention_colours"])
+
+selected_dialog = data_dialogues[set_data["current_dialogue"]]
+diag_turns = selected_dialog["dialog"]["turns"]
+rerank_dialog_examples = split_utterance_history(selected_dialog["to_rerank"])
+utterance_history, passage = [(d["utterance_history"], d["passage"])
+                              for d in rerank_dialog_examples
+                              if d["label"] == 1][0]
+last_user_utterance = utterance_history.split("agent: ")[0]
+last_user_utterance_id = [t['turn_id'] for t in diag_turns if t["utterance"] == last_user_utterance][0]
+grounded_agent_utterance_id = last_user_utterance_id  # Ids stats from 1 and agent utterance is the next after user
+grounded_agent_utterance = diag_turns[grounded_agent_utterance_id]
+nr_show_utterances = grounded_agent_utterance_id + 1
+
+# MID SECTION - CHAT
+with chat:
+    for utterance in diag_turns[:nr_show_utterances]:
+        is_user = True if utterance["role"] == "user" else False
+        message(f"{utterance['utterance']}", is_user=is_user)
+
+    st.chat_input("Say something")
+
+# Cross encoder inference on current dialogue
+max_to_rerank = 32
+pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
+batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
+pred = cross_encoder.process_large_batch(batch, max_to_rerank)
+
+# Sorting wrt predictions
+sorted_indexes = torch.argsort(pred, descending=True)
+reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
+sorted_preds = [pred[i] for i in sorted_indexes]
+
+# Get attention across heads
+att_weights = cross_encoder.get_attention_weights()
+
+# RIGHT SECTION EXPLAINING features
 with (explaining):
     "### Reranked results and attention visualizations"
     gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
@@ -253,28 +252,17 @@ with (explaining):
 
     with att_rollout_tab:
         try:
-            max_to_rerank = 32
-            pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
-            batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
-            pred = cross_encoder.process_large_batch(batch, max_to_rerank)
+            # Compute attention rollout
+            att_weights_norm_heads = mean_attention_heads(att_weights)
+            batched_rollouts = attention_rollout(att_weights_norm_heads)
+            batched_rollouts_cls = batched_rollouts[:, 0, :]
 
-            # Mean across heads
-            att_weights = [torch.mean(t, dim=1) for t in cross_encoder.get_attention_weights()]
-            batched_rollout = []
-            for r in range(max_to_rerank):
-                rollout = attention_rollout(att_weights, r)
-                CLS_token_rollout = rollout[0, :]
-                batched_rollout.append(CLS_token_rollout)
-
-            # Reranking based on prediction scores
-            sorted_indexes = torch.argsort(pred, descending=True)
-            reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
-            reranked_rollouts = [batched_rollout[i] for i in sorted_indexes]
-            preds = [pred[i] for i in sorted_indexes]
+            # Reranking rollouts on prediction scores
+            reranked_rollouts = [batched_rollouts_cls[i] for i in sorted_indexes]
 
 
             def visualize_rollout(colours="linear"):
-                for idx, (example, rollout, score) in enumerate(zip(reranked_examples, reranked_rollouts, preds),
+                for idx, (example, rollout, score) in enumerate(zip(reranked_examples, reranked_rollouts, sorted_preds),
                                                                 start=1):
                     score = score if set_data["show_relevance_score"] else None
                     psg = split_to_tokens(example["passage"])
@@ -295,7 +283,7 @@ with (explaining):
                     visualize_rollout(colours="nonlinear")
 
         finally:
-            del batch, pre_examples, pred, preds, att_weights, batched_rollout
+            del batch, att_weights
             torch.cuda.empty_cache()
 
     with raw_att_tab:
