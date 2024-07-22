@@ -24,7 +24,7 @@ EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
 
 
-@st.cache_data
+@st.cache_resource
 def init_model():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     cross_encoder = CrossEncoder(model_name)
@@ -112,17 +112,17 @@ def show_annotated_psg(passage_text, idx,
     with st.container(border=True):
         col_idx, passage_col = st.columns([77, 1000])
         with col_idx:
-            if is_grounding:
-                st.subheader(f':blue[{idx}]')
-            else:
-                st.subheader(idx)
+            # Print psg index number in colour if grounding
+            f'### :blue[{idx}]' if is_grounding else f'### {idx}'
 
         with passage_col:
             if score is not None:
-                f"#### {score.cpu()}"
+                f"#### {score}"
 
             if annotation_list is not None:
-                colours_annotation_list = annt_list_2_colours(annotation_list, base_colour, colours)
+                colours_annotation_list = (annt_list_2_colours(annotation_list, base_colour, colours)
+                                           if not hide_attention_colours
+                                           else ["#00000000"] * len(annotation_list))
                 coloured_passage = []
                 for colour, text in zip(colours_annotation_list, passage_text):
                     if colour is None:
@@ -131,10 +131,7 @@ def show_annotated_psg(passage_text, idx,
                         text_tokens = split_to_tokens(text)
                         for token in text_tokens:
                             token = token.replace('$', '\$')
-                            if hide_attention_colours:
-                                coloured_passage.append(token + " ")
-                            else:
-                                coloured_passage.append((token, "", colour))
+                            coloured_passage.append((token, "", colour))
 
                 annotated_text(coloured_passage)
             else:
@@ -213,7 +210,7 @@ grounded_agent_utterance_id = last_user_utterance_id  # Ids stats from 1 and age
 grounded_agent_utterance = diag_turns[grounded_agent_utterance_id]
 nr_show_utterances = grounded_agent_utterance_id + 1
 
-# MID SECTION - CHAT
+# MID SECTION CHAT
 with chat:
     for utterance in diag_turns[:nr_show_utterances]:
         is_user = True if utterance["role"] == "user" else False
@@ -221,19 +218,36 @@ with chat:
 
     st.chat_input("Say something")
 
+
 # Cross encoder inference on current dialogue
-max_to_rerank = 32
-pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
-batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
-pred = cross_encoder.process_large_batch(batch, max_to_rerank)
+@st.cache_data
+def cross_encoder_inference(rerank_dialog_examples):
+    max_to_rerank = 32
+    pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
+    batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
+    preds = cross_encoder.process_large_batch(batch, max_to_rerank)
+    att_weights = cross_encoder.get_attention_weights()
 
-# Sorting wrt predictions
-sorted_indexes = torch.argsort(pred, descending=True)
-reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
-sorted_preds = [pred[i] for i in sorted_indexes]
+    # Sorting wrt predictions
+    sorted_indexes = torch.argsort(preds, descending=True)
+    reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
+    sorted_preds = [preds[i] for i in sorted_indexes]
 
-# Get attention across heads
-att_weights = cross_encoder.get_attention_weights()
+    # Compute attention rollout
+    att_weights_norm_heads = mean_attention_heads(att_weights)
+    batched_rollouts = attention_rollout(att_weights_norm_heads)
+    batched_rollouts_cls = batched_rollouts[:, 0, :]
+
+    # Reranking rollouts on prediction scores
+    reranked_rollouts = [batched_rollouts_cls[i] for i in sorted_indexes]
+    return {
+        "reranked_examples": reranked_examples,
+        "sorted_predictions": sorted_preds,
+        "reranked_rollouts": reranked_rollouts
+    }
+
+
+inf_out = cross_encoder_inference(rerank_dialog_examples)
 
 # RIGHT SECTION EXPLAINING features
 with (explaining):
@@ -251,40 +265,27 @@ with (explaining):
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
     with att_rollout_tab:
-        try:
-            # Compute attention rollout
-            att_weights_norm_heads = mean_attention_heads(att_weights)
-            batched_rollouts = attention_rollout(att_weights_norm_heads)
-            batched_rollouts_cls = batched_rollouts[:, 0, :]
-
-            # Reranking rollouts on prediction scores
-            reranked_rollouts = [batched_rollouts_cls[i] for i in sorted_indexes]
-
-
-            def visualize_rollout(colours="linear"):
-                for idx, (example, rollout, score) in enumerate(zip(reranked_examples, reranked_rollouts, sorted_preds),
-                                                                start=1):
-                    score = score if set_data["show_relevance_score"] else None
-                    psg = split_to_tokens(example["passage"])
-                    rollout = rollout[1:][:-1][:len(psg)]
-                    show_annotated_psg(psg, idx, is_grounding=example["label"],
-                                       annotation_list=rollout, base_colour="green",
-                                       colours=colours, score=score,
-                                       hide_attention_colours=set_data["hide_attention_colours"])
+        def visualize_rollout(colours="linear"):
+            for idx, (r_example, rollout, score) in enumerate(
+                    zip(inf_out['reranked_examples'], inf_out['reranked_rollouts'], inf_out['sorted_predictions']),
+                    start=1):
+                score = score if set_data["show_relevance_score"] else None
+                psg = split_to_tokens(r_example["passage"])
+                rollout = rollout[1:][:-1][:len(psg)]
+                show_annotated_psg(psg, idx, is_grounding=r_example["label"],
+                                   annotation_list=rollout, base_colour="green",
+                                   colours=colours, score=score,
+                                   hide_attention_colours=set_data["hide_attention_colours"])
 
 
-            linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
-            with linear_tab:
-                with st.container(height=800):
-                    visualize_rollout(colours="linear")
+        linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
+        with linear_tab:
+            with st.container(height=800):
+                visualize_rollout(colours="linear")
 
-            with not_linear_tab:
-                with st.container(height=800):
-                    visualize_rollout(colours="nonlinear")
-
-        finally:
-            del batch, att_weights
-            torch.cuda.empty_cache()
+        with not_linear_tab:
+            with st.container(height=800):
+                visualize_rollout(colours="nonlinear")
 
     with raw_att_tab:
         "Raw attention tab"
