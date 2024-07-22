@@ -91,13 +91,13 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
         raise ValueError(f"Base colour {base_colour} not supported")
 
     coloured_list = [conv_fce(x) for x in colour_range]
-    return [x if x not in ["#000000", "#111100", "#11011"] else None
+    return [x if x not in ["#000000", "#111100", "#11011"] else ["#00000000"]
             for x in coloured_list]
 
 
 def show_annotated_psg(passage_text, idx,
                        is_grounding=False,
-                       annotation_list=None,
+                       annotation_scores=None,
                        base_colour="blue",
                        colours="linear",
                        score=None,
@@ -105,7 +105,7 @@ def show_annotated_psg(passage_text, idx,
                        ):
     """
     :param passage_text: string if annotation_list is None, else list of strings of same length as annotation_list
-    :param annotation_list: list of numbers used to colour the passage_text
+    :param annotation_scores: list of numbers used to colour the passage_text
     :param idx: ID of the passage to show
     :param is_grounding: Whether the passage is the grounding passage - id will be shown in colour
     """
@@ -119,19 +119,16 @@ def show_annotated_psg(passage_text, idx,
             if score is not None:
                 f"#### {score}"
 
-            if annotation_list is not None:
-                colours_annotation_list = (annt_list_2_colours(annotation_list, base_colour, colours)
+            if annotation_scores is not None:
+                colours_annotation_list = (annt_list_2_colours(annotation_scores, base_colour, colours)
                                            if not hide_attention_colours
-                                           else ["#00000000"] * len(annotation_list))
+                                           else ["#00000000"] * len(annotation_scores))
                 coloured_passage = []
                 for colour, text in zip(colours_annotation_list, passage_text):
-                    if colour is None:
-                        coloured_passage.append(text.replace('$', '\$'))
-                    else:
-                        text_tokens = split_to_tokens(text)
-                        for token in text_tokens:
-                            token = token.replace('$', '\$')
-                            coloured_passage.append((token, "", colour))
+                    text_tokens = split_to_tokens(text)
+                    for token in text_tokens:
+                        token = token.replace('$', '\$')
+                        coloured_passage.append((token, "", colour))
 
                 annotated_text(coloured_passage)
             else:
@@ -273,7 +270,7 @@ with (explaining):
                 psg = split_to_tokens(r_example["passage"])
                 rollout = rollout[1:][:-1][:len(psg)]
                 show_annotated_psg(psg, idx, is_grounding=r_example["label"],
-                                   annotation_list=rollout, base_colour="green",
+                                   annotation_scores=rollout, base_colour="green",
                                    colours=colours, score=score,
                                    hide_attention_colours=set_data["hide_attention_colours"])
 
