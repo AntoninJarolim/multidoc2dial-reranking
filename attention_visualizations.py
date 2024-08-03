@@ -62,6 +62,8 @@ def mean_attention_heads(attentions_heads):
 
 
 def annt_list_2_colours(annotation_list, base_colour, colours):
+    if annotation_list is None:
+        return None
     assert base_colour in ["blue", "red", "green"], f"Base colour {base_colour} not supported"
 
     # Normalize annotation list and convert to ints (0-255)
@@ -95,56 +97,51 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
             for x in coloured_list]
 
 
-def show_annotated_psg(passage_text, idx,
-                       is_grounding=False,
-                       annotation_scores=None,
-                       base_colour="blue",
-                       colours="linear",
-                       score=None,
-                       hide_attention_colours=False,
-                       ):
+def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_scores=None, base_colour="blue",
+                       colour_type="linear", score=None, hide_attention_colours=False, gt_label_list=None):
     """
-    :param passage_text: string if annotation_list is None, else list of strings of same length as annotation_list
+    :param gt_label_list:
+    :param passage_tokens: list of strings of same length as annotation_list
     :param annotation_scores: list of numbers used to colour the passage_text
     :param idx: ID of the passage to show
     :param is_grounding: Whether the passage is the grounding passage - id will be shown in colour
     """
+    assert not isinstance(passage_tokens, str)
+
     with st.container(border=True):
         col_idx, passage_col = st.columns([77, 1000])
         with col_idx:
             # Print psg index number in colour if grounding
             f'### :blue[{idx}]' if is_grounding else f'### {idx}'
 
+        # Create default list of colours for each token
+        colours_annotation_list = ["#00000000"] * len(passage_tokens)
+        if annotation_scores is not None and not hide_attention_colours:
+            colours_annotation_list = annt_list_2_colours(annotation_scores, base_colour, colour_type)
+
+        gt_label_list = gt_label_list or [""] * len(passage_tokens)
+
         with passage_col:
             if score is not None:
                 f"#### {score}"
 
-            if annotation_scores is not None:
-                colours_annotation_list = (annt_list_2_colours(annotation_scores, base_colour, colours)
-                                           if not hide_attention_colours
-                                           else ["#00000000"] * len(annotation_scores))
-                coloured_passage = []
-                for colour, text in zip(colours_annotation_list, passage_text):
-                    text_tokens = split_to_tokens(text)
-                    for token in text_tokens:
-                        token = token.replace('$', '\$')
-                        coloured_passage.append((token, "", colour))
+            coloured_passage = []
+            for colour, token, gt_label in zip(colours_annotation_list, passage_tokens, gt_label_list):
+                token = token.replace('$', '\$')
+                coloured_passage.append((token, gt_label, colour))
 
-                annotated_text(coloured_passage)
-            else:
-                passage_text = passage_text.replace('$', '\$')
-                passage_text
+            annotated_text(coloured_passage)
 
 
 def create_grounding_annt_list(passage, grounded_agent_utterance, label):
     if label == 0:
-        return passage, None
+        return split_to_tokens(passage), None
 
     # Create annotation list
     annotation_list = []
     broken_passage = []
     for reference in grounded_agent_utterance["references"]:
-        ref_span = reference["ref_span"]
+        ref_span = reference["ref_span"].strip(" ")
 
         if passage == ref_span:
             annotation_list.append(1)
@@ -169,7 +166,16 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
     if passage != "":
         annotation_list.append(0)
         broken_passage.append(passage)
-    return broken_passage, annotation_list
+
+    unpack_passages = []
+    unpack_annt_list = []
+    for psg, annt in zip(broken_passage, annotation_list):
+        psg_tokens = split_to_tokens(psg)
+        for t in psg_tokens:
+            unpack_passages.append(t)
+            unpack_annt_list.append(annt)
+
+    return unpack_passages, unpack_annt_list
 
 
 data_dialogues = get_data()
@@ -240,11 +246,10 @@ def cross_encoder_inference(rerank_dialog_examples):
     return {
         "reranked_examples": reranked_examples,
         "sorted_predictions": sorted_preds,
-        "reranked_rollouts": reranked_rollouts
+        "reranked_rollouts": reranked_rollouts,
+        "attention_weights": att_weights_norm_heads
     }
 
-
-inf_out = cross_encoder_inference(rerank_dialog_examples)
 
 # RIGHT SECTION EXPLAINING features
 with (explaining):
@@ -262,16 +267,18 @@ with (explaining):
                 show_annotated_psg(passage_list, i, example["label"], annotation_list)
 
     with att_rollout_tab:
+        inf_out = cross_encoder_inference(rerank_dialog_examples)
+
+
         def visualize_rollout(colours="linear"):
             for idx, (r_example, rollout, score) in enumerate(
                     zip(inf_out['reranked_examples'], inf_out['reranked_rollouts'], inf_out['sorted_predictions']),
                     start=1):
                 score = score if set_data["show_relevance_score"] else None
-                psg = split_to_tokens(r_example["passage"])
+                psg = split_to_tokens(r_example["x"])
                 rollout = rollout[1:][:-1][:len(psg)]
-                show_annotated_psg(psg, idx, is_grounding=r_example["label"],
-                                   annotation_scores=rollout, base_colour="green",
-                                   colours=colours, score=score,
+                show_annotated_psg(psg, idx, is_grounding=r_example["label"], annotation_scores=rollout,
+                                   base_colour="green", colour_type=colours, score=score,
                                    hide_attention_colours=set_data["hide_attention_colours"])
 
 
