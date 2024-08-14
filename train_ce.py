@@ -129,6 +129,8 @@ class CrossEncoder(torch.nn.Module):
 
         self.save_attention_weights = False  # Whether to save attention weights during evaluation
         self.last_attention_weights = None
+        self.save_gradients = False
+        self.saved_gradients = []
 
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         cls_features = self.get_cls_features(input_ids, attention_mask, token_type_ids)
@@ -151,6 +153,15 @@ class CrossEncoder(torch.nn.Module):
             # Save attention weights
             if self.save_attention_weights:
                 self.last_attention_weights = outputs[2]
+
+            if self.save_gradients:
+                self.saved_gradients = []
+
+                def extract_grads(grad):
+                    self.saved_gradients.append(grad)
+
+                for layer_attention_weight in self.last_attention_weights:
+                    layer_attention_weight.register_hook(extract_grads)
 
             return pooled_output
         else:
@@ -236,9 +247,15 @@ class CrossEncoder(torch.nn.Module):
         if not self.save_attention_weights:
             return
         # self.last_attention_weights is tuple of layers
-        cpu_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
-        self.last_attention_weights = torch.stack(cpu_weights)
+        # cpu_weights = [layer.detach().cpu() for layer in self.last_attention_weights]
+        # self.last_attention_weights = torch.stack(cpu_weights)
         return self.last_attention_weights
+
+    def get_gradients(self):
+        assert self.save_gradients, "You need to set save_gradients to True before calling this method"
+        assert len(self.saved_gradients) != 0, \
+            "There are no saved gradients, you should call forward before this method"
+        return self.saved_gradients
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):

@@ -1,16 +1,9 @@
-import json
-
 import numpy as np
 import streamlit as st
 import torch
-from annotated_text import annotated_text
 from streamlit_chat import message
-from transformers import AutoTokenizer
 
-import utils
-from interpretability import attention_rollout
-from md2d_dataset import preprocess_examples
-from train_ce import CrossEncoder
+from visualization_data import init_model, InferenceDataProvider
 
 st.set_page_config(layout="wide")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,40 +18,15 @@ model_name = "naver/trecdl22-crossencoder-debertav3"
 
 
 @st.cache_resource
-def init_model():
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    cross_encoder = CrossEncoder(model_name)
-    cross_encoder.save_attention_weights = True
-    cross_encoder.bert_model.config.output_attentions = True
-    cross_encoder = utils.load_model(cross_encoder, "CE_lr0.00010485388296357131_bs16.pt")
-    cross_encoder.to(device)
-    cross_encoder.eval()
-    return cross_encoder, tokenizer
+def cache_init_model():
+    return init_model()
 
 
-cross_encoder, tokenizer = init_model()
-
-
-@st.cache_data
-def get_data():
-    return json.load(open(EXAMPLE_VALIDATION_DATA))
+cross_encoder, tokenizer = cache_init_model()
 
 
 def split_to_tokens(text):
     return tokenizer.batch_decode(tokenizer(text)["input_ids"])[1:][:-1]
-
-
-def split_utterance_history(raw_rarank_data):
-    return list(map(lambda x: {
-        "x": x["x"],
-        "label": x["label"],
-        "utterance_history": x["x"].split("[SEP]")[0],
-        "passage": x["x"].split("[SEP]")[1]
-    }, raw_rarank_data))
-
-
-def mean_attention_heads(attentions_heads):
-    return torch.mean(attentions_heads, dim=2)
 
 
 def annt_list_2_colours(annotation_list, base_colour, colours):
@@ -78,7 +46,7 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
     colour_range = (normalized_tensor_list * 255).type(torch.int64)
 
     if not (0 <= torch.min(colour_range)):
-        raise ValueError(f"min: Conversion of {torch.min(colour_range)} to colour range failed")
+        f"min: Conversion of {torch.min(colour_range)} to colour range failed"
     assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
 
     if base_colour == "blue":
@@ -123,17 +91,36 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
         if gt_label_list is None:
             gt_label_list = [None] * len(passage_tokens)
 
+        def display_colored_word(word, bg_color, fg_color):
+            # Create the HTML string with inline CSS for styling
+            return f"""
+                <span style="display: 
+                inline-flex; 
+                flex-direction: row; 
+                align-items: center; 
+                background: {bg_color}; 
+                border-radius: 0.5rem; 
+                padding: 0.25rem 0.5rem; 
+                overflow: hidden; 
+                line-height: 1; 
+                color: {fg_color};
+                ">                
+                {word}
+                </span>
+            """
+
         with passage_col:
             if score is not None:
                 f"#### {score}"
 
-            coloured_passage = []
+            psg_custom = []
             for bg_colour, token, gt_label in zip(colours_annotation_list, passage_tokens, gt_label_list):
                 fg_colour = "#FFFFFF" if not gt_label else "#4455FF"
                 token = token.replace('$', '\$')
-                coloured_passage.append((token, "", bg_colour, fg_colour))
+                span_text = display_colored_word(token, bg_colour, fg_colour)
+                psg_custom.append(span_text)
 
-            annotated_text(coloured_passage)
+            st.html("\n".join(psg_custom))
 
 
 def create_grounding_annt_list(passage, grounded_agent_utterance, label):
@@ -183,8 +170,6 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
     return unpack_passages, unpack_annt_list
 
 
-data_dialogues = get_data()
-
 # This variables will be set in configuration sidebar
 set_data = {
     "current_dialogue": 0,
@@ -192,137 +177,110 @@ set_data = {
     "show_explanations": False,
     "show_relevance_score": False,
     "hide_attention_colours": False,
+    "online_inference": False
 }
+
+data_provider = InferenceDataProvider(cross_encoder, tokenizer)
 
 # CONFIGURATION SIDEBAR
 with st.sidebar:
     "## Configuration"
     "### Dialog loading"
-    dialogue_index = st.selectbox('Example dialog id:', list(range(len(data_dialogues))))
+    dialogue_index = st.selectbox('Example dialog id:',
+                                  list(range(data_provider.get_nr_dialogs())), key="dialogue_index",
+                                  index=set_data["current_dialogue"])
     set_data["current_dialogue"] = dialogue_index
 
     "### Togglers"
     set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
     set_data["show_relevance_score"] = st.toggle("Show relevance score", set_data["show_relevance_score"])
     set_data["hide_attention_colours"] = st.toggle("Hide attention colours", set_data["hide_attention_colours"])
+    set_data["online_inference"] = st.toggle("Online inference", set_data["online_inference"])
 
-    selected_dialog = data_dialogues[set_data["current_dialogue"]]
-    diag_turns = selected_dialog["dialog"]["turns"]
-    rerank_dialog_examples = split_utterance_history(selected_dialog["to_rerank"])
-    utterance_history, passage = [(d["utterance_history"], d["passage"])
-                                  for d in rerank_dialog_examples
-                                  if d["label"] == 1][0]
-    last_user_utterance = utterance_history.split("agent: ")[0]
-    last_user_utterance_id = [t['turn_id'] for t in diag_turns if t["utterance"] == last_user_utterance][0]
-    grounded_agent_utterance_id = last_user_utterance_id  # Ids stats from 1 and agent utterance is the next after user
-    grounded_agent_utterance = diag_turns[grounded_agent_utterance_id]
-    nr_show_utterances = grounded_agent_utterance_id + 1
-
-    # MID SECTION CHAT
-    with chat:
-        for utterance in diag_turns[:nr_show_utterances]:
-            is_user = True if utterance["role"] == "user" else False
-            message(f"{utterance['utterance']}", is_user=is_user)
-
-        st.chat_input("Say something")
+data_provider_mode = "online" if set_data["online_inference"] else "offline"
+data_provider.set_mode(data_provider_mode)
 
 
-    # Cross encoder inference on current dialogue
-    @st.cache_data
-    def cross_encoder_inference(rerank_dialog_examples):
-        max_to_rerank = 32
-        pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
-        batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
-        preds = cross_encoder.process_large_batch(batch, max_to_rerank)
-        att_weights = cross_encoder.get_attention_weights()
-
-        # Sorting wrt predictions
-        sorted_indexes = torch.argsort(preds, descending=True).cpu()
-        reranked_examples = [rerank_dialog_examples[i] for i in sorted_indexes]
-        sorted_preds = [preds[i] for i in sorted_indexes]
-
-        # Compute attention rollout
-        print(att_weights.shape)
-        att_weights_norm_heads = mean_attention_heads(att_weights)
-        print(att_weights_norm_heads.shape)
-        batched_rollouts = attention_rollout(att_weights_norm_heads)
-        print(batched_rollouts.shape)
-        batched_rollouts_cls = batched_rollouts[:, 0, :]
-        print(batched_rollouts[:, 0, :].shape)
-        print(batched_rollouts[:, 0, :])
-        print(batched_rollouts[:, 1, :])
-        print(batched_rollouts[:, 2, :])
-        print(batched_rollouts[:, 12, :])
-        # batched_rollouts_cls = batched_rollouts[:, :, 0]
-
-        # Reranking rollouts on prediction scores
-        reranked_att_weights = att_weights[:, sorted_indexes, :, 0, :]
-        reranked_rollouts = [batched_rollouts_cls[i] for i in sorted_indexes]
-        return {
-            "reranked_examples": reranked_examples,
-            "sorted_predictions": sorted_preds,
-            "reranked_rollouts": reranked_rollouts,
-            "attention_weights": att_weights_norm_heads,
-            "att_weights_cls": reranked_att_weights  # (L, B, H, S)
-        }
+@st.cache_data
+def cache_dialog_inference_out(dialog_id):
+    return data_provider.get_dialog_out(dialog_id)
 
 
-    # RIGHT SECTION EXPLAINING features
-    with (explaining):
-        "### Reranked results and attention visualizations"
-        gt_tab, att_rollout_tab, raw_att_tab = st.tabs(["Ground Truth", "Attention Rollout", "Raw Attention"])
+diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
+    = cache_dialog_inference_out(set_data["current_dialogue"])
 
-        with gt_tab:
-            with st.container(height=800):
-                for i, example in enumerate(rerank_dialog_examples, start=1):
-                    passage_list, gt_labels = create_grounding_annt_list(example["passage"],
-                                                                         grounded_agent_utterance,
-                                                                         example["label"])
-                    show_annotated_psg(passage_list, i, example["label"], gt_label_list=gt_labels)
+# MID SECTION CHAT
+with chat:
+    for utterance in diag_turns[:nr_show_utterances]:
+        is_user = True if utterance["role"] == "user" else False
+        message(f"{utterance['utterance']}", is_user=is_user)
 
-        inf_out = cross_encoder_inference(rerank_dialog_examples)
+    st.chat_input("Say something")
 
 
-        def visualize_example(scores_to_colour, colour_type="linear"):
+# Cross encoder inference on current dialogue
+@st.cache_data
+def cache_cross_encoder_inference(dialog_id):
+    return data_provider.get_dialog_inference_out(dialog_id)
 
-            for idx, (r_example, score_colour, score) in enumerate(
-                    zip(inf_out['reranked_examples'], scores_to_colour, inf_out['sorted_predictions']),
-                    start=1):
-                score = score if set_data["show_relevance_score"] else None
-                passage_list, gt_labels = create_grounding_annt_list(r_example['x'],
+
+# RIGHT SECTION EXPLAINING features
+with (explaining):
+    "### Reranked results and attention visualizations"
+    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab = st.tabs(["Ground Truth",
+                                                                  "Raw Attention",
+                                                                  "Attention Rollout",
+                                                                  "Grad-SAM"])
+
+    with gt_tab:
+        with st.container(height=800):
+            for i, example in enumerate(rerank_dialog_examples, start=1):
+                passage_list, gt_labels = create_grounding_annt_list(example["passage"],
                                                                      grounded_agent_utterance,
-                                                                     r_example["label"])
-                score_colour = score_colour[1:][:-1][:len(passage_list)]
-                show_annotated_psg(passage_list, idx, is_grounding=r_example["label"], annotation_scores=score_colour,
-                                   base_colour="green", colour_type=colour_type, score=score,
-                                   hide_attention_colours=set_data["hide_attention_colours"],
-                                   gt_label_list=gt_labels)
+                                                                     example["label"])
+                show_annotated_psg(passage_list, i, example["label"], gt_label_list=gt_labels)
+
+    inf_out = cache_cross_encoder_inference(rerank_dialog_examples)
 
 
-        with att_rollout_tab:
+    def visualize_example(scores_to_colour, colour_type="linear"):
+        for idx, (r_example, score_colour, score) in enumerate(
+                zip(inf_out['reranked_examples'], scores_to_colour, inf_out['sorted_predictions']),
+                start=1):
+            score = score if set_data["show_relevance_score"] else None
+            passage_list, gt_labels = create_grounding_annt_list(r_example['x'],
+                                                                 grounded_agent_utterance,
+                                                                 r_example["label"])
+            score_colour = score_colour[1:][:-1][:len(passage_list)]
+            show_annotated_psg(passage_list, idx, is_grounding=r_example["label"], annotation_scores=score_colour,
+                               base_colour="green", colour_type=colour_type, score=score,
+                               hide_attention_colours=set_data["hide_attention_colours"],
+                               gt_label_list=gt_labels)
 
-            linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
-            with linear_tab:
-                with st.container(height=800):
-                    visualize_example(inf_out['reranked_rollouts'], colour_type="linear")
 
-            with not_linear_tab:
-                with st.container(height=800):
-                    visualize_example(inf_out['reranked_rollouts'], colour_type="nonlinear")
+    def lin_non_lin_tab(scores_to_colour):
+        linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
+        with linear_tab:
+            with st.container(height=800):
+                visualize_example(scores_to_colour, colour_type="linear")
 
-        with raw_att_tab:
-            l_idx = st.number_input("Raw Attention Layer", min_value=1, max_value=24)
-            att_weights = inf_out["att_weights_cls"]  # (L, B, H, S)
+        with not_linear_tab:
+            with st.container(height=800):
+                visualize_example(scores_to_colour, colour_type="nonlinear")
 
-            head_tabs = st.tabs([f"Head {i + 1}" for i in range(att_weights.shape[2])])
-            for h_idx, head_tab in enumerate(head_tabs):
-                with head_tab:
-                    att_map = att_weights[l_idx, :, h_idx, :]
-                    linear_tab, not_linear_tab = st.tabs(["Linear colour", "Non-linear colours"])
-                    with linear_tab:
-                        with st.container(height=800):
-                            visualize_example(att_map, colour_type="linear")
 
-                    with not_linear_tab:
-                        with st.container(height=800):
-                            visualize_example(att_map, colour_type="nonlinear")
+    with raw_att_tab:
+        l_idx = st.number_input("Raw Attention Layer", min_value=1, max_value=24) - 1
+        att_weights = inf_out["att_weights_cls"]  # (L, B, H, S)
+
+        head_tabs = st.tabs([f"Head {i + 1}" for i in range(att_weights[0].shape[1])])
+        for h_idx, head_tab in enumerate(head_tabs):
+            with head_tab:
+                att_map = [w[l_idx, h_idx, :] for w in att_weights]
+                lin_non_lin_tab(att_map)
+
+    with att_rollout_tab:
+        lin_non_lin_tab(inf_out['reranked_rollouts'])
+
+    with grad_sam_tab:
+        lin_non_lin_tab(inf_out['grad_sam_scores'])
