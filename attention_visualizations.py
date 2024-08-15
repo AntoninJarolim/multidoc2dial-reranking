@@ -140,7 +140,7 @@ def create_grounding_annt_list(passage, grounded_agent_utterance, label):
             broken_passage.append(ref_span)
             break
 
-        before, after = passage.split(ref_span)
+        before, after = passage.split(ref_span, 1)
 
         # Found reference is not at the beginning of the passage
         if before != "":
@@ -187,7 +187,7 @@ with st.sidebar:
     "## Configuration"
     "### Dialog loading"
     dialogue_index = st.selectbox('Example dialog id:',
-                                  list(range(data_provider.get_nr_dialogs())), key="dialogue_index",
+                                  data_provider.get_sorted_dialogs(), key="dialogue_index",
                                   index=set_data["current_dialogue"])
     set_data["current_dialogue"] = dialogue_index
 

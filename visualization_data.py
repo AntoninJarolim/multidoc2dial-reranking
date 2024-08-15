@@ -210,3 +210,8 @@ class InferenceDataProvider:
 
     def get_nr_dialogs(self):
         return len(self.meta_data)
+
+    def get_sorted_dialogs(self):
+        data = [md["diag_id"] for md in self.meta_data]
+        data.reverse()
+        return data
