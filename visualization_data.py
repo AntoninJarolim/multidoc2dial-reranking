@@ -215,6 +215,18 @@ def score_to_span_scores(grad_sam_scores, spans):
     return torch.cat(new_grad_sam_scores)
 
 
+def simple_span_merging(inf_out_example):
+    span_grad_sam_scores = []
+    for i, example in enumerate(inf_out_example["reranked_examples"]):
+        sentences = nltk.sent_tokenize(example["x"])
+        example["spans"] = split_to_spans(sentences)
+
+        grad_sam_scores = inf_out_example["grad_sam_scores"][i]
+        grad_sam_scores_spans = score_to_span_scores(grad_sam_scores, example["spans"])
+        span_grad_sam_scores.append(grad_sam_scores_spans)
+    return span_grad_sam_scores
+
+
 if __name__ == "__main__":
     cross_encoder, tokenizer = init_model()
 
@@ -225,15 +237,7 @@ if __name__ == "__main__":
         except FileNotFoundError:
             continue
 
-        span_grad_sam_scores = []
-        for i, example in enumerate(last_loaded_example["inf_out"]["reranked_examples"]):
-            sentences = nltk.sent_tokenize(example["x"])
-            example["spans"] = split_to_spans(sentences)
-
-            grad_sam_scores = last_loaded_example["inf_out"]["grad_sam_scores"][i]
-            grad_sam_scores_spans = score_to_span_scores(grad_sam_scores, example["spans"])
-            span_grad_sam_scores.append(grad_sam_scores_spans)
-
+        span_grad_sam_scores = simple_span_merging(last_loaded_example["inf_out"])
         last_loaded_example["inf_out"]["grad_sam_scores_spans_K_N"] = span_grad_sam_scores
 
         torch.save(last_loaded_example, f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")

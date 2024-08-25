@@ -296,8 +296,7 @@ with (explaining):
     with grad_sam_tab:
         lin_non_lin_tab(inf_out['grad_sam_scores'])
 
-    with grad_sam_tab_spans:
-        lin_non_lin_tab(inf_out['grad_sam_scores_spans'])
-
-    with grad_sam_tab_spans2:
-        lin_non_lin_tab(inf_out['grad_sam_scores_spans_K_N'])
+    # with grad_sam_tab_spans:
+    #     lin_non_lin_tab(inf_out['grad_sam_scores_spans'])
+    # with grad_sam_tab_spans2:
+    #     lin_non_lin_tab(inf_out['grad_sam_scores_spans_K_N'])
