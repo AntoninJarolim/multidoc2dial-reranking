@@ -227,10 +227,14 @@ def cache_cross_encoder_inference(dialog_id):
 # RIGHT SECTION EXPLAINING features
 with (explaining):
     "### Reranked results and attention visualizations"
-    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab = st.tabs(["Ground Truth",
-                                                                  "Raw Attention",
-                                                                  "Attention Rollout",
-                                                                  "Grad-SAM"])
+    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, grad_sam_tab_spans, grad_sam_tab_spans2 = st.tabs(
+        ["Ground Truth",
+         "Raw Attention",
+         "Attention Rollout",
+         "Grad-SAM",
+         "Grad-SAM spans",
+         "Grad-SAM spans N K",
+         ])
 
     with gt_tab:
         with st.container(height=800):
@@ -284,3 +288,9 @@ with (explaining):
 
     with grad_sam_tab:
         lin_non_lin_tab(inf_out['grad_sam_scores'])
+
+    with grad_sam_tab_spans:
+        lin_non_lin_tab(inf_out['grad_sam_scores_spans'])
+
+    with grad_sam_tab_spans2:
+        lin_non_lin_tab(inf_out['grad_sam_scores_spans_K_N'])

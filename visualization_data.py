@@ -1,5 +1,6 @@
 import json
 
+import nltk
 import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -23,6 +24,9 @@ def init_model():
     cross_encoder.to(device)
     cross_encoder.eval()
     return cross_encoder, tokenizer
+
+
+cross_encoder, tokenizer = init_model()
 
 
 def get_data():
@@ -116,9 +120,8 @@ def cross_encoder_inference(rerank_dialog_examples):
     }
 
 
-if __name__ == "__main__":
+def generate_offline_data():
     # Code here is used to generate offline data for the visualization
-    cross_encoder, tokenizer = init_model()
     data_dialogues = get_data()
 
     diag_examples = []
@@ -161,6 +164,80 @@ if __name__ == "__main__":
 
     diag_examples = sorted(diag_examples, key=lambda x: x['gt_example_prediction'])
     json.dump(diag_examples, open("data/examples/inference/diag_examples_inference_out.json", "w"))
+
+
+def split_to_tokens(text):
+    return tokenizer.batch_decode(tokenizer(text)["input_ids"])[1:][:-1]
+
+
+def split_to_spans(sentences):
+    spans = []
+    spans_split_by = ["//", ","]
+    for sentence in sentences:
+        if "[SEP]" in sentence:
+            sep_split1, sep_split2 = sentence.split("[SEP]")
+            if "//" in sep_split2:
+                before, after = sep_split2.split("//", 1)
+                spans.extend([sep_split1, "[SEP]", before + "//", after])
+            else:
+                spans.extend([sep_split1, "[SEP]", sep_split2])
+            continue
+
+        added_split = False
+        for split_by in spans_split_by:
+            if split_by in sentence:
+                before, after = sentence.split(split_by, 1)
+                spans.extend([before + split_by, after])
+                added_split = True
+                break
+
+        if not added_split:
+            spans.append(sentence)
+
+    return spans
+
+
+def score_to_span_scores(grad_sam_scores, spans):
+    nr_tokens_all = 0
+    new_grad_sam_scores = []
+    for span in spans:
+        nr_tokens_span = len(split_to_tokens(span))
+        if nr_tokens_span == 0:
+            continue
+        nr_tokens_all += nr_tokens_span
+
+        grad_sam_score_spans = grad_sam_scores[nr_tokens_all: nr_tokens_all + nr_tokens_span]
+        # new_grad_sam_score = torch.mean(grad_sam_score_spans)
+        t = nr_tokens_span
+        N = 13
+        k = 4
+        new_grad_sam_score = torch.sum(grad_sam_score_spans) / ((1 + N) * (t + k) / t)
+        new_grad_sam_scores.append(torch.ones(nr_tokens_span) * new_grad_sam_score)
+    return torch.cat(new_grad_sam_scores)
+
+
+if __name__ == "__main__":
+    cross_encoder, tokenizer = init_model()
+
+    for dialog_id in tqdm(range(200), desc="Dialogs"):
+        try:
+            last_loaded_example = torch.load(
+                f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
+        except FileNotFoundError:
+            continue
+
+        span_grad_sam_scores = []
+        for i, example in enumerate(last_loaded_example["inf_out"]["reranked_examples"]):
+            sentences = nltk.sent_tokenize(example["x"])
+            example["spans"] = split_to_spans(sentences)
+
+            grad_sam_scores = last_loaded_example["inf_out"]["grad_sam_scores"][i]
+            grad_sam_scores_spans = score_to_span_scores(grad_sam_scores, example["spans"])
+            span_grad_sam_scores.append(grad_sam_scores_spans)
+
+        last_loaded_example["inf_out"]["grad_sam_scores_spans_K_N"] = span_grad_sam_scores
+
+        torch.save(last_loaded_example, f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
 
 
 class InferenceDataProvider:
