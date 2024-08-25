@@ -3,7 +3,7 @@ import streamlit as st
 import torch
 from streamlit_chat import message
 
-from visualization_data import init_model, InferenceDataProvider
+from visualization_data import init_model, InferenceDataProvider, split_to_tokens
 
 st.set_page_config(layout="wide")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -23,10 +23,6 @@ def cache_init_model():
 
 
 cross_encoder, tokenizer = cache_init_model()
-
-
-def split_to_tokens(text):
-    return tokenizer.batch_decode(tokenizer(text)["input_ids"])[1:][:-1]
 
 
 def annt_list_2_colours(annotation_list, base_colour, colours):
@@ -177,7 +173,9 @@ set_data = {
     "show_explanations": False,
     "show_relevance_score": False,
     "hide_attention_colours": False,
-    "online_inference": False
+    "online_inference": False,
+    "show_raw_attention": False,
+    "nr_examples": 8
 }
 
 data_provider = InferenceDataProvider(cross_encoder, tokenizer)
@@ -190,12 +188,16 @@ with st.sidebar:
                                   data_provider.get_sorted_dialogs(), key="dialogue_index",
                                   index=set_data["current_dialogue"])
     set_data["current_dialogue"] = dialogue_index
+    set_data["nr_examples"] = st.selectbox('Number of dialogs to show:',
+                                           list(range(32)),
+                                           index=set_data["nr_examples"])
 
     "### Togglers"
     set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
     set_data["show_relevance_score"] = st.toggle("Show relevance score", set_data["show_relevance_score"])
     set_data["hide_attention_colours"] = st.toggle("Hide attention colours", set_data["hide_attention_colours"])
     set_data["online_inference"] = st.toggle("Online inference", set_data["online_inference"])
+    set_data["show_raw_attention"] = st.toggle("Show raw attention", set_data["show_raw_attention"])
 
 data_provider_mode = "online" if set_data["online_inference"] else "offline"
 data_provider.set_mode(data_provider_mode)
@@ -220,8 +222,9 @@ with chat:
 
 # Cross encoder inference on current dialogue
 @st.cache_data
-def cache_cross_encoder_inference(dialog_id):
-    return data_provider.get_dialog_inference_out(dialog_id)
+def cache_cross_encoder_inference(dialog_id, nr_examples):
+    # Dialog id is used for caching management
+    return data_provider.get_dialog_inference_out(dialog_id, nr_examples)
 
 
 # RIGHT SECTION EXPLAINING features
@@ -238,13 +241,14 @@ with (explaining):
 
     with gt_tab:
         with st.container(height=800):
-            for i, example in enumerate(rerank_dialog_examples, start=1):
+            show_gt_examples = rerank_dialog_examples[:set_data["nr_examples"]]
+            for i, example in enumerate(show_gt_examples, start=1):
                 passage_list, gt_labels = create_grounding_annt_list(example["passage"],
                                                                      grounded_agent_utterance,
                                                                      example["label"])
                 show_annotated_psg(passage_list, i, example["label"], gt_label_list=gt_labels)
 
-    inf_out = cache_cross_encoder_inference(rerank_dialog_examples)
+    inf_out = cache_cross_encoder_inference(set_data["current_dialogue"], set_data["nr_examples"])
 
 
     def visualize_example(scores_to_colour, colour_type="linear"):
@@ -274,14 +278,17 @@ with (explaining):
 
 
     with raw_att_tab:
-        l_idx = st.number_input("Raw Attention Layer", min_value=1, max_value=24) - 1
-        att_weights = inf_out["att_weights_cls"]  # (L, B, H, S)
+        if set_data["show_raw_attention"]:
+            l_idx = st.number_input("Raw Attention Layer", min_value=1, max_value=24) - 1
+            att_weights = inf_out["att_weights_cls"]  # (L, B, H, S)
 
-        head_tabs = st.tabs([f"Head {i + 1}" for i in range(att_weights[0].shape[1])])
-        for h_idx, head_tab in enumerate(head_tabs):
-            with head_tab:
-                att_map = [w[l_idx, h_idx, :] for w in att_weights]
-                lin_non_lin_tab(att_map)
+            head_tabs = st.tabs([f"Head {i + 1}" for i in range(att_weights[0].shape[1])])
+            for h_idx, head_tab in enumerate(head_tabs):
+                with head_tab:
+                    att_map = [w[l_idx, h_idx, :] for w in att_weights]
+                    lin_non_lin_tab(att_map)
+        else:
+            "#### Raw attention is disabled"
 
     with att_rollout_tab:
         lin_non_lin_tab(inf_out['reranked_rollouts'])

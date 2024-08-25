@@ -61,8 +61,7 @@ def get_current_dialog(loaded_data_dialogues, current_id):
     return diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples
 
 
-def cross_encoder_inference(rerank_dialog_examples):
-    max_to_rerank = 32
+def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
     pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
     batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
 
@@ -260,20 +259,22 @@ class InferenceDataProvider:
             pass
         self.mode = new_mode
 
-    def get_dialog_inference_out(self, dialog_id):
+    def get_dialog_inference_out(self, dialog_id, max_to_rerank=32):
         assert self.mode in ["online", "offline"]
 
         if self.mode == "offline":
-            return self.last_loaded_example["inf_out"]
+            inf_out = self.last_loaded_example["inf_out"]
+            for inf_key in inf_out.keys():
+                inf_out[inf_key] = inf_out[inf_key][:max_to_rerank]
+            return inf_out
         elif self.mode == "online":
-            return cross_encoder_inference(self.last_rerank_dialog_examples)
+            return cross_encoder_inference(self.last_rerank_dialog_examples, max_to_rerank)
 
     def get_dialog_out(self, dialog_id):
         assert self.mode in ["online", "offline"]
 
         if self.mode == "offline":
-            self.last_loaded_example = torch.load(
-                f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
+            self.last_loaded_example = self.load_example(dialog_id)
             diag_turns = self.last_loaded_example["diag_turns"]
             grounded_agent_utterance = self.last_loaded_example["grounded_agent_utterance"]
             nr_show_utterances = self.last_loaded_example["nr_show_utterances"]
@@ -284,6 +285,10 @@ class InferenceDataProvider:
                 = get_current_dialog(self.data, dialog_id)
             self.last_rerank_dialog_examples = rerank_dialog_examples
             return diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples
+
+    @staticmethod
+    def load_example(dialog_id):
+        return torch.load(f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
 
     def get_nr_dialogs(self):
         return len(self.meta_data)
