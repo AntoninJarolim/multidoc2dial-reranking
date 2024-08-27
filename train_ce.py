@@ -129,8 +129,15 @@ class CrossEncoder(torch.nn.Module):
 
         self.save_attention_weights = False  # Whether to save attention weights during evaluation
         self.last_attention_weights = None
-        self.save_gradients = False
-        self.saved_gradients = []
+
+        self.save_att_gradients = False
+        self.saved_att_gradients = []
+
+        self.save_output_gradients = False
+        self.saved_output_gradients = []
+
+        self.save_outputs = False
+        self.saved_outputs = None
 
     def forward(self, input_ids, attention_mask, token_type_ids=None):
         cls_features = self.get_cls_features(input_ids, attention_mask, token_type_ids)
@@ -145,23 +152,36 @@ class CrossEncoder(torch.nn.Module):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             output_hidden_states=True)
+        layer_outputs = outputs["hidden_states"][1:]  # 0-th index are initial embeddings
         if isinstance(self.bert_model, DebertaV2Model):
             # Deberta model doesnt do pooling automatically
-            encoder_layer = outputs[0]
+            encoder_layer = outputs["last_hidden_state"]
             pooled_output = self.pooler(encoder_layer)
 
             # Save attention weights
             if self.save_attention_weights:
-                self.last_attention_weights = outputs[2]
+                self.last_attention_weights = outputs["attentions"]
 
-            if self.save_gradients:
-                self.saved_gradients = []
+            if self.save_att_gradients:
+                self.saved_att_gradients = []
 
                 def extract_grads(grad):
-                    self.saved_gradients.append(grad)
+                    self.saved_att_gradients.append(grad)
 
-                for layer_attention_weight in self.last_attention_weights:
+                for layer_attention_weight in outputs["attentions"]:
                     layer_attention_weight.register_hook(extract_grads)
+
+            if self.save_output_gradients:
+                self.saved_output_gradients = []
+
+                def extract_out_grads(grad):
+                    self.saved_output_gradients.append(grad)
+
+                for layer_out in layer_outputs:
+                    layer_out.register_hook(extract_out_grads)
+
+            if self.save_outputs:
+                self.saved_outputs = layer_outputs
 
             return pooled_output
         else:
@@ -251,11 +271,11 @@ class CrossEncoder(torch.nn.Module):
         # self.last_attention_weights = torch.stack(cpu_weights)
         return self.last_attention_weights
 
-    def get_gradients(self):
-        assert self.save_gradients, "You need to set save_gradients to True before calling this method"
-        assert len(self.saved_gradients) != 0, \
+    def get_att_gradients(self):
+        assert self.save_att_gradients, "You need to set save_gradients to True before calling this method"
+        assert len(self.saved_att_gradients) != 0, \
             "There are no saved gradients, you should call forward before this method"
-        return self.saved_gradients
+        return self.saved_att_gradients
 
 
 class WarmupCosineAnnealingWarmRestarts(LRScheduler):

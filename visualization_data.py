@@ -6,7 +6,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 import utils
-from interpretability import attention_rollout, grad_sam
+from interpretability import attention_rollout, grad_sam, att_cat
 from md2d_dataset import preprocess_examples
 from train_ce import CrossEncoder
 
@@ -27,6 +27,9 @@ def init_model():
 
 
 cross_encoder, tokenizer = init_model()
+cross_encoder.save_att_gradients = True
+cross_encoder.save_output_gradients = True
+cross_encoder.save_outputs = True
 
 
 def get_data():
@@ -65,10 +68,10 @@ def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
     pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
     batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
 
-    cross_encoder.save_gradients = True
     logits = []
     attention_maps = []
     grad_sam_scores = []
+    att_cat_scores = []
     for in_ids, att_mask, tt_ids in zip(batch['in_ids'], batch['att_mask'], batch['tt_ids']):
         logit = cross_encoder(
             input_ids=in_ids[None, :],
@@ -79,16 +82,21 @@ def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
         logit.backward()
 
         with torch.no_grad():
-            # Get gradients and attention weights
-            grads = torch.stack(cross_encoder.get_gradients()).squeeze()
+            # Get gradients, outputs and attention weights
+            att_grads = torch.stack(cross_encoder.get_att_gradients()).squeeze()
             att_weights_tuple = cross_encoder.get_attention_weights()
+            outputs = cross_encoder.saved_outputs
+            out_grads = cross_encoder.saved_output_gradients
 
             # Stack attention weights
             atts = torch.stack([layer.squeeze() for layer in att_weights_tuple])
             attention_maps.append(atts)
 
-            grad_sam_score = grad_sam(atts, grads)
+            grad_sam_score = grad_sam(atts, att_grads)
             grad_sam_scores.append(grad_sam_score)
+
+            att_cat_score = att_cat(outputs, out_grads, atts)
+            att_cat_scores.append(att_cat_score)
 
     logits = torch.tensor(logits)
 
@@ -109,13 +117,15 @@ def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
     reranked_att_weights_cls = [attention_maps[i][:, :, 0, :].cpu() for i in sorted_indexes]
     reranked_rollouts = [batched_rollouts_cls[i].cpu() for i in sorted_indexes]
     reranked_grad_sam_scores = [grad_sam_scores[i].cpu() for i in sorted_indexes]
+    reranked_att_cat_scores = [att_cat_scores[i].cpu() for i in sorted_indexes]
     torch.cuda.empty_cache()
     return {
         "reranked_examples": reranked_examples,
         "sorted_predictions": sorted_logits,
         "reranked_rollouts": reranked_rollouts,
         "att_weights_cls": reranked_att_weights_cls,  # (B, L, H, S)
-        "grad_sam_scores": reranked_grad_sam_scores
+        "grad_sam_scores": reranked_grad_sam_scores,
+        "att_cat_scores": reranked_att_cat_scores
     }
 
 
@@ -272,6 +282,8 @@ class InferenceDataProvider:
                 inf_out[inf_key] = inf_out[inf_key][:max_to_rerank]
             return inf_out
         elif self.mode == "online":
+            if self.last_rerank_dialog_examples is None:
+                self.get_dialog_out(dialog_id)
             return cross_encoder_inference(self.last_rerank_dialog_examples, max_to_rerank)
 
     def get_dialog_out(self, dialog_id):

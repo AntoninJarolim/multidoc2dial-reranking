@@ -28,20 +28,21 @@ cross_encoder, tokenizer = cache_init_model()
 def annt_list_2_colours(annotation_list, base_colour, colours):
     if annotation_list is None:
         return None
-    assert base_colour in ["blue", "red", "green"], f"Base colour {base_colour} not supported"
 
-    # Normalize annotation list and convert to ints (0-255)
     if not isinstance(annotation_list, torch.Tensor):
         annotation_list = torch.Tensor(annotation_list)
 
     normalized_tensor_list = annotation_list / torch.max(annotation_list)
     if colours == "nonlinear":
+        negative_index = torch.where(normalized_tensor_list < 0)
+        normalized_tensor_list = torch.abs(normalized_tensor_list)
         transf_list = -torch.log(normalized_tensor_list)
         normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
+        normalized_tensor_list[negative_index] = -normalized_tensor_list[negative_index]
 
     colour_range = (normalized_tensor_list * 255).type(torch.int64)
 
-    if not (0 <= torch.min(colour_range)):
+    if not (-256 <= torch.min(colour_range)):
         f"min: Conversion of {torch.min(colour_range)} to colour range failed"
     assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
 
@@ -50,10 +51,13 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
             return f'#1111{x:02x}'
     elif base_colour == "green":
         def conv_fce(x):
-            return f'#11{x:02x}11'
+            if x > 0:
+                return f'#11{x:02x}11'
+            else:
+                return f'#{abs(x):02x}1111'
     elif base_colour == "red":
         def conv_fce(x):
-            return f'#{x:02x}0000'
+            return f'#{x:02x}1111'
     else:
         raise ValueError(f"Base colour {base_colour} not supported")
 
@@ -173,9 +177,9 @@ set_data = {
     "show_explanations": False,
     "show_relevance_score": False,
     "hide_attention_colours": False,
-    "online_inference": False,
+    "online_inference": True,
     "show_raw_attention": False,
-    "nr_examples": 8
+    "nr_passages": 8
 }
 
 data_provider = InferenceDataProvider(cross_encoder, tokenizer)
@@ -188,9 +192,9 @@ with st.sidebar:
                                   data_provider.get_sorted_dialogs(), key="dialogue_index",
                                   index=set_data["current_dialogue"])
     set_data["current_dialogue"] = dialogue_index
-    set_data["nr_examples"] = st.selectbox('Number of dialogs to show:',
+    set_data["nr_passages"] = st.selectbox('Number of passages to show:',
                                            list(range(32)),
-                                           index=set_data["nr_examples"])
+                                           index=set_data["nr_passages"])
 
     "### Togglers"
     set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
@@ -222,33 +226,34 @@ with chat:
 
 # Cross encoder inference on current dialogue
 @st.cache_data
-def cache_cross_encoder_inference(dialog_id, nr_examples):
+def cache_cross_encoder_inference(dialog_id, nr_passages):
     # Dialog id is used for caching management
-    return data_provider.get_dialog_inference_out(dialog_id, nr_examples)
+    return data_provider.get_dialog_inference_out(dialog_id, nr_passages)
 
 
 # RIGHT SECTION EXPLAINING features
 with (explaining):
     "### Reranked results and attention visualizations"
-    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, grad_sam_tab_spans, grad_sam_tab_spans2 = st.tabs(
+    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, att_cat_tab, grad_sam_tab_spans, grad_sam_tab_spans2 = st.tabs(
         ["Ground Truth",
          "Raw Attention",
          "Attention Rollout",
          "Grad-SAM",
+         "Att-CAT",
          "Grad-SAM spans",
          "Grad-SAM spans N K",
          ])
 
     with gt_tab:
         with st.container(height=800):
-            show_gt_examples = rerank_dialog_examples[:set_data["nr_examples"]]
+            show_gt_examples = rerank_dialog_examples[:set_data["nr_passages"]]
             for i, example in enumerate(show_gt_examples, start=1):
                 passage_list, gt_labels = create_grounding_annt_list(example["passage"],
                                                                      grounded_agent_utterance,
                                                                      example["label"])
                 show_annotated_psg(passage_list, i, example["label"], gt_label_list=gt_labels)
 
-    inf_out = cache_cross_encoder_inference(set_data["current_dialogue"], set_data["nr_examples"])
+    inf_out = cache_cross_encoder_inference(set_data["current_dialogue"], set_data["nr_passages"])
 
 
     def visualize_example(scores_to_colour, colour_type="linear"):
@@ -295,6 +300,9 @@ with (explaining):
 
     with grad_sam_tab:
         lin_non_lin_tab(inf_out['grad_sam_scores'])
+
+    with att_cat_tab:
+        lin_non_lin_tab(inf_out['att_cat_scores'])
 
     # with grad_sam_tab_spans:
     #     lin_non_lin_tab(inf_out['grad_sam_scores_spans'])
