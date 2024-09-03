@@ -94,6 +94,10 @@ def messages_for_passages(turns, diag_passages, openai_api, nr_passages=16):
             "to select spans containing answer to the last question based on entire dialogue history.  You may select "
             "multiple spans if needed, but ensure that the selected sections do not overlap. Try to not select entire "
             "sentences, but only fine-grained spans."
+            "If there is reference (e.g. [1]) in the text, you must include it in the span."
+            "Do not correct or modify the text: "
+            "Include all grammatical and syntactic errors from the original text, "
+            "do not remove senseless spaces or punctuation."
             "Return json_object with key 'spans' and list of selected spans as value. "
             "\n"
             "Dialogue history:"
@@ -184,13 +188,13 @@ def get_output_batch(batch_id):
 
     if batch.status == "completed":
         print("Batch is completed")
+        print(batch)
         result_file_id = batch.output_file_id
         result = client.files.content(result_file_id).content
-        batch_filename = batch.metadata["for_filename"].strip('.jsonl')
-        result_file_name = f"openAI_batches/{batch_filename}_output.jsonl"
-        with open(result_file_name, 'wb') as file:
+        batch_filename = batch.metadata["for_filename"].replace('.jsonl', '_output.jsonl')
+        with open(batch_filename, 'wb') as file:
             file.write(result)
-        print(f"Output file saved to {result_file_name}")
+        print(f"Output file saved to {batch_filename}")
     else:
         print("\n\n\n")
         print(f"All batches:")

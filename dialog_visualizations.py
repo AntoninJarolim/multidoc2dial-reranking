@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import streamlit as st
 import torch
@@ -123,24 +125,40 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
             st.html("\n".join(psg_custom))
 
 
-def create_grounding_annt_list(passage, grounding_references, label):
+def find_reference_span(passage, grounding_references):
+    try:
+        before, after = passage.split(grounding_references, 1)
+    except ValueError:
+        passage = re.sub(' +', ' ', passage)
+        passage = re.sub(' ,', ',', passage)
+        before, after = passage.split(grounding_references, 1)
+    return before, after
+
+
+def create_grounding_annt_list(passage, grounding_references, label, return_failed=False):
     if label == 0:
         return split_to_tokens(passage), None
+    passage = passage.lower()
 
     # Create annotation list
+    failed_references = []
     annotation_list = []
     broken_passage = []
     for reference in grounding_references:
         # strip space, because it is sometimes appended at the end and the space is not in
         # the passage, leading to not finding part of passage containing this reference span
-        ref_span = reference["ref_span"].strip(" ")
+        ref_span = reference["ref_span"].strip(" ").lower()
 
         if passage == ref_span:
             annotation_list.append(True)
             broken_passage.append(ref_span)
             break
 
-        before, after = passage.split(ref_span, 1)
+        try:
+            before, after = find_reference_span(passage, ref_span)
+        except ValueError:
+            failed_references.append(ref_span)
+            continue
 
         # Found reference is not at the beginning of the passage
         if before != "":
@@ -167,19 +185,25 @@ def create_grounding_annt_list(passage, grounding_references, label):
             unpack_passages.append(t)
             unpack_annt_list.append(annt)
 
+    # Do not return empty list but None, pass it to the function as None
+    if not unpack_passages:
+        unpack_passages = None
+
+    if return_failed:
+        return unpack_passages, unpack_annt_list, failed_references
     return unpack_passages, unpack_annt_list
 
 
 # This variables will be set in configuration sidebar
 set_data = {
-    "current_dialogue": 0,
+    "current_dialogue": 4,
     "gt_label_colour": "#2222DD",
     "show_explanations": False,
     "show_relevance_score": False,
     "hide_attention_colours": False,
     "online_inference": False,
     "show_raw_attention": False,
-    "nr_passages": 8
+    "nr_passages": 16
 }
 
 data_provider = InferenceDataProvider(cross_encoder, tokenizer)
@@ -270,24 +294,25 @@ with (explaining):
             is_grounding = 1
             for i, example in enumerate(show_gt_examples, start=1):
                 if "gpt_references" in example:
-
                     passage_list, gt_labels = create_grounding_annt_list(example["passage"],
                                                                          grounded_agent_utterance["references"],
                                                                          example["label"])
-                    try:
-                        _, gpt_labels_refs = create_grounding_annt_list(example["passage"],
-                                                                        example["gpt_references"],
-                                                                        is_grounding)
-                    except ValueError:
-                        "##### Parsing of GPT references failed! \n"
-                        "References: ", example["gpt_references"], "\n"
-                        gpt_labels_refs = None
-                    show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels,
-                                       base_colour="green", annotation_scores=gpt_labels_refs)
-                else:
-                    with st.container(border=True):
-                        "#### GPT references not generated for this passage! \n"
-                        example["passage"]
+                    _, gpt_labels_refs, failed_refs = create_grounding_annt_list(example["passage"],
+                                                                                 example["gpt_references"],
+                                                                                 is_grounding,
+                                                                                 return_failed=True)
+                    if failed_refs:
+                        f"##### Parsing of GPT references failed for passage {i}\n"
+                        "Failed references: ", failed_refs, "\n"
+                        # create_grounding_annt_list(example["passage"],
+                        #                            example["gpt_references"],
+                        #                            is_grounding)
+                show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels,
+                                   base_colour="green", annotation_scores=gpt_labels_refs)
+            else:
+                with st.container(border=True):
+                    "#### GPT references not generated for this passage! \n"
+                    example["passage"]
 
 
     def visualize_example(scores_to_colour, colour_type="linear"):
