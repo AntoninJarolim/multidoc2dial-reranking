@@ -262,7 +262,7 @@ with (explaining):
                 show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels)
 
     inf_out = cache_cross_encoder_inference(set_data["current_dialogue"], set_data["nr_passages"])
-    show_gt_examples = inf_out["reranked_examples"][:set_data["nr_passages"]]
+    show_gt_examples = inf_out["reranked_examples"]
 
     with gpt_tab:
         with st.container(height=800):

@@ -283,8 +283,7 @@ class InferenceDataProvider:
         assert self.mode in ["online", "offline"]
 
         if self.mode == "offline":
-            if self.last_loaded_example is None:
-                self.get_dialog_out(dialog_id)
+            self.get_dialog_out(dialog_id)
 
             inf_out = self.last_loaded_example["inf_out"]
             for inf_key in inf_out.keys():
@@ -292,8 +291,7 @@ class InferenceDataProvider:
 
             return inf_out
         elif self.mode == "online":
-            if self.last_rerank_dialog_examples is None:
-                self.get_dialog_out(dialog_id)
+            self.get_dialog_out(dialog_id)
             return cross_encoder_inference(self.last_rerank_dialog_examples, max_to_rerank)
 
     def get_dialog_out(self, dialog_id):
