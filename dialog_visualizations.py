@@ -13,7 +13,7 @@ chat, _, explaining = st.columns([6, 1, 6])
 data = np.random.randn(10, 1)
 
 # DATA
-EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
+EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking_gpt.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
 
 
@@ -123,14 +123,14 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
             st.html("\n".join(psg_custom))
 
 
-def create_grounding_annt_list(passage, grounded_agent_utterance, label):
+def create_grounding_annt_list(passage, grounding_references, label):
     if label == 0:
         return split_to_tokens(passage), None
 
     # Create annotation list
     annotation_list = []
     broken_passage = []
-    for reference in grounded_agent_utterance["references"]:
+    for reference in grounding_references:
         # strip space, because it is sometimes appended at the end and the space is not in
         # the passage, leading to not finding part of passage containing this reference span
         ref_span = reference["ref_span"].strip(" ")
@@ -177,7 +177,7 @@ set_data = {
     "show_explanations": False,
     "show_relevance_score": False,
     "hide_attention_colours": False,
-    "online_inference": True,
+    "online_inference": False,
     "show_raw_attention": False,
     "nr_passages": 8
 }
@@ -188,19 +188,27 @@ data_provider = InferenceDataProvider(cross_encoder, tokenizer)
 with st.sidebar:
     "## Configuration"
     "### Dialog loading"
-    dialogue_index = st.selectbox('Example dialog id:',
-                                  data_provider.get_sorted_dialogs(), key="dialogue_index",
-                                  index=set_data["current_dialogue"])
-    set_data["current_dialogue"] = dialogue_index
+    set_data["online_inference"] = st.toggle("Online inference", set_data["online_inference"])
+    choose_by_relevance = st.toggle("Sorted by relevance", False)
+    dialogue_index = st.selectbox('Dialog id:',
+                                  data_provider.get_valid_dialog_ids(), key="dialogue_index",
+                                  index=set_data["current_dialogue"],
+                                  disabled=choose_by_relevance)
+
+    dialogue_index_relevance = st.selectbox('Dialog id by relevance score:',
+                                            data_provider.get_inf_sorted_dialog_ids(), key="dialogue_index_relevance",
+                                            index=set_data["current_dialogue"],
+                                            disabled=not choose_by_relevance)
+
+    set_data["current_dialogue"] = dialogue_index_relevance if choose_by_relevance else dialogue_index
+
+    "### Visualization settings"
     set_data["nr_passages"] = st.selectbox('Number of passages to show:',
                                            list(range(32)),
                                            index=set_data["nr_passages"])
-
-    "### Togglers"
     set_data["show_explanations"] = st.toggle("Show explanations", set_data["show_explanations"])
     set_data["show_relevance_score"] = st.toggle("Show relevance score", set_data["show_relevance_score"])
     set_data["hide_attention_colours"] = st.toggle("Hide attention colours", set_data["hide_attention_colours"])
-    set_data["online_inference"] = st.toggle("Online inference", set_data["online_inference"])
     set_data["show_raw_attention"] = st.toggle("Show raw attention", set_data["show_raw_attention"])
 
 data_provider_mode = "online" if set_data["online_inference"] else "offline"
@@ -234,26 +242,52 @@ def cache_cross_encoder_inference(dialog_id, nr_passages):
 # RIGHT SECTION EXPLAINING features
 with (explaining):
     "### Reranked results and attention visualizations"
-    gt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, att_cat_tab, grad_sam_tab_spans, grad_sam_tab_spans2 = st.tabs(
+    gt_tab, gpt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, att_cat_tab = st.tabs(
         ["Ground Truth",
+         "gpt-4o-2024-08-06",
          "Raw Attention",
          "Attention Rollout",
          "Grad-SAM",
          "Att-CAT",
-         "Grad-SAM spans",
-         "Grad-SAM spans N K",
          ])
+
+    show_gt_examples = rerank_dialog_examples[:set_data["nr_passages"]]
 
     with gt_tab:
         with st.container(height=800):
-            show_gt_examples = rerank_dialog_examples[:set_data["nr_passages"]]
             for i, example in enumerate(show_gt_examples, start=1):
                 passage_list, gt_labels = create_grounding_annt_list(example["passage"],
-                                                                     grounded_agent_utterance,
+                                                                     grounded_agent_utterance["references"],
                                                                      example["label"])
-                show_annotated_psg(passage_list, i, example["label"], gt_label_list=gt_labels)
+                show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels)
 
     inf_out = cache_cross_encoder_inference(set_data["current_dialogue"], set_data["nr_passages"])
+    show_gt_examples = inf_out["reranked_examples"][:set_data["nr_passages"]]
+
+    with gpt_tab:
+        with st.container(height=800):
+            # Set grounding to 1 for all passages (using same function as for GT)
+            is_grounding = 1
+            for i, example in enumerate(show_gt_examples, start=1):
+                if "gpt_references" in example:
+
+                    passage_list, gt_labels = create_grounding_annt_list(example["passage"],
+                                                                         grounded_agent_utterance["references"],
+                                                                         example["label"])
+                    try:
+                        _, gpt_labels_refs = create_grounding_annt_list(example["passage"],
+                                                                        example["gpt_references"],
+                                                                        is_grounding)
+                    except ValueError:
+                        "##### Parsing of GPT references failed! \n"
+                        "References: ", example["gpt_references"], "\n"
+                        gpt_labels_refs = None
+                    show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels,
+                                       base_colour="green", annotation_scores=gpt_labels_refs)
+                else:
+                    with st.container(border=True):
+                        "#### GPT references not generated for this passage! \n"
+                        example["passage"]
 
 
     def visualize_example(scores_to_colour, colour_type="linear"):
@@ -262,7 +296,7 @@ with (explaining):
                 start=1):
             score = score if set_data["show_relevance_score"] else None
             passage_list, gt_labels = create_grounding_annt_list(r_example['x'],
-                                                                 grounded_agent_utterance,
+                                                                 grounded_agent_utterance["references"],
                                                                  r_example["label"])
             score_colour = score_colour[1:][:-1][:len(passage_list)]
             show_annotated_psg(passage_list, idx, is_grounding=r_example["label"], annotation_scores=score_colour,

@@ -27,9 +27,6 @@ def init_model():
 
 
 cross_encoder, tokenizer = init_model()
-cross_encoder.save_att_gradients = True
-cross_encoder.save_output_gradients = True
-cross_encoder.save_outputs = True
 
 
 def get_data():
@@ -49,10 +46,15 @@ def mean_attention_heads(attentions_layers_tuple):
     return torch.stack([torch.mean(layer, dim=1) for layer in attentions_layers_tuple])
 
 
-def get_current_dialog(loaded_data_dialogues, current_id):
-    selected_dialog = loaded_data_dialogues[current_id]
+def get_current_dialog(selected_dialog):
     diag_turns = selected_dialog["dialog"]["turns"]
     rerank_dialog_examples = split_utterance_history(selected_dialog["to_rerank"])
+
+    if "gpt_references" in selected_dialog:
+        for psg_id, gpt_ref in selected_dialog["gpt_references"].items():
+            psg_id = int(psg_id)
+            rerank_dialog_examples[psg_id]["gpt_references"] = gpt_ref
+
     utterance_history, passage = [(d["utterance_history"], d["passage"])
                                   for d in rerank_dialog_examples
                                   if d["label"] == 1][0]
@@ -67,6 +69,10 @@ def get_current_dialog(loaded_data_dialogues, current_id):
 def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
     pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
     batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
+
+    cross_encoder.save_att_gradients = True
+    cross_encoder.save_output_gradients = True
+    cross_encoder.save_outputs = True
 
     logits = []
     attention_maps = []
@@ -125,18 +131,20 @@ def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
         "reranked_rollouts": reranked_rollouts,
         "att_weights_cls": reranked_att_weights_cls,  # (B, L, H, S)
         "grad_sam_scores": reranked_grad_sam_scores,
-        "att_cat_scores": reranked_att_cat_scores
+        "att_cat_scores": reranked_att_cat_scores,
+        "sorted_indexes": sorted_indexes
     }
 
 
-def generate_offline_data():
+def generate_offline_data(from_id=0, to_id=200):
     # Code here is used to generate offline data for the visualization
     data_dialogues = get_data()
 
     diag_examples = []
-    for dialog_idx in tqdm(range(200), desc="Dialogs"):
+    for dialog_idx in tqdm(range(from_id, to_id), desc="Dialogs"):
+        selected_dialogue = data_dialogues[dialog_idx]
         diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
-            = get_current_dialog(data_dialogues, dialog_idx)
+            = get_current_dialog(selected_dialogue)
 
         inf_out = cross_encoder_inference(rerank_dialog_examples)
 
@@ -237,31 +245,17 @@ def simple_span_merging(inf_out_example):
     return span_grad_sam_scores
 
 
-if __name__ == "__main__":
-    cross_encoder, tokenizer = init_model()
-
-    for dialog_id in tqdm(range(200), desc="Dialogs"):
-        try:
-            last_loaded_example = torch.load(
-                f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
-        except FileNotFoundError:
-            continue
-
-        span_grad_sam_scores = simple_span_merging(last_loaded_example["inf_out"])
-        last_loaded_example["inf_out"]["grad_sam_scores_spans_K_N"] = span_grad_sam_scores
-
-        torch.save(last_loaded_example, f"data/examples/inference/{dialog_id}_dialogue_reranking_inference.pt")
-
-
 class InferenceDataProvider:
     def __init__(self, cross_encoder, tokenizer):
-        self.mode = None
         self.cross_encoder = cross_encoder
         self.tokenizer = tokenizer
         self.meta_data = json.load(open("data/examples/inference/diag_examples_inference_out.json"))
         self.data = None  # Data will be loaded online in mode
         self.last_loaded_example = None  # Last loaded example for offline mode
         self.last_rerank_dialog_examples = None  # used to remember dialog for online inference
+
+        self.mode = None
+        self.set_mode("offline")
 
     def set_mode(self, new_mode):
         if self.mode == new_mode:
@@ -277,9 +271,13 @@ class InferenceDataProvider:
         assert self.mode in ["online", "offline"]
 
         if self.mode == "offline":
+            if self.last_loaded_example is None:
+                self.get_dialog_out(dialog_id)
+
             inf_out = self.last_loaded_example["inf_out"]
             for inf_key in inf_out.keys():
                 inf_out[inf_key] = inf_out[inf_key][:max_to_rerank]
+
             return inf_out
         elif self.mode == "online":
             if self.last_rerank_dialog_examples is None:
@@ -298,7 +296,7 @@ class InferenceDataProvider:
             return diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples
         elif self.mode == "online":
             diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
-                = get_current_dialog(self.data, dialog_id)
+                = get_current_dialog(self.data[dialog_id])
             self.last_rerank_dialog_examples = rerank_dialog_examples
             return diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples
 
@@ -309,7 +307,10 @@ class InferenceDataProvider:
     def get_nr_dialogs(self):
         return len(self.meta_data)
 
-    def get_sorted_dialogs(self):
+    def get_inf_sorted_dialog_ids(self):
         data = [md["diag_id"] for md in self.meta_data]
         data.reverse()
         return data
+
+    def get_valid_dialog_ids(self):
+        return sorted(self.get_inf_sorted_dialog_ids())
