@@ -8,7 +8,7 @@ from openai import OpenAI
 from tqdm import tqdm
 
 from visualization_data import init_model, InferenceDataProvider, get_data, get_current_dialog, EXAMPLE_VALIDATION_DATA, \
-    generate_offline_data
+    generate_offline_data, generate_metadata
 
 
 class OpenAIGenerator:
@@ -224,7 +224,7 @@ def messages_from_file(batch_filename):
     return messages
 
 
-def process_output(batch_filename):
+def process_output(batch_filename, refresh_metadata=True):
     cross_encoder, tokenizer = init_model()
     messages = messages_from_file(batch_filename)
     data = get_data()
@@ -254,7 +254,7 @@ def process_output(batch_filename):
 
     json.dump(data, open(EXAMPLE_VALIDATION_DATA, "w"), indent=4)
     from_id, to_id = batch_filename.split("_batch-")[1].strip("_output.jsonl").split("-")
-    generate_offline_data(int(from_id), int(to_id))
+    generate_offline_data(int(from_id), int(to_id), refresh_metadata=refresh_metadata)
 
 
 def asdf():
@@ -313,7 +313,8 @@ if __name__ == "__main__":
             if filename.endswith("_output.jsonl"):
                 out_filename = f"{base_dir}/{filename}"
                 print(f"Processing {out_filename}")
-                process_output(out_filename)
+                process_output(out_filename, refresh_metadata=False)
+        generate_metadata()
 
     else:
         print("No action specified")

@@ -136,12 +136,33 @@ def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
     }
 
 
-def generate_offline_data(from_id=0, to_id=200):
+def generate_metadata():
+    diag_examples = []
+    for dialog_idx in tqdm(range(200), desc="Getting metadata information"):
+        try:
+            diag_example = torch.load(f"data/examples/inference/{dialog_idx}_dialogue_reranking_inference.pt")
+        except FileNotFoundError:
+            # A few dialogues are skipped during inference
+            continue
+
+        diag_examples.append(
+            {
+                "diag_id": diag_example["diag_id"],
+                "gt_example_prediction": diag_example["gt_example_prediction"].tolist(),
+                "gt_rank": diag_example["gt_rank"],
+                "nr_turns": diag_example["nr_show_utterances"],
+            }
+        )
+
+    diag_examples = sorted(diag_examples, key=lambda x: x['gt_example_prediction'])
+    json.dump(diag_examples, open("data/examples/inference/diag_examples_inference_out.json", "w"))
+
+
+def generate_offline_data(from_id=0, to_id=200, refresh_metadata=True):
     # Code here is used to generate offline data for the visualization
     data_dialogues = get_data()
 
-    diag_examples = []
-    for dialog_idx in tqdm(range(from_id, to_id), desc="Dialogs"):
+    for dialog_idx in tqdm(range(from_id, to_id), desc="Inferecing dialogues"):
         selected_dialogue = data_dialogues[dialog_idx]
         diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
             = get_current_dialog(selected_dialogue)
@@ -168,19 +189,10 @@ def generate_offline_data(from_id=0, to_id=200):
             "inf_out": inf_out,
         }
 
-        diag_examples.append(
-            {
-                "diag_id": dialog_idx,
-                "gt_example_prediction": gt_example_prediction.tolist(),
-                "gt_rank": gt_rank,
-                "nr_turns": nr_show_utterances
-            }
-        )
-
         torch.save(diag_example, f"data/examples/inference/{dialog_idx}_dialogue_reranking_inference.pt")
 
-    diag_examples = sorted(diag_examples, key=lambda x: x['gt_example_prediction'])
-    json.dump(diag_examples, open("data/examples/inference/diag_examples_inference_out.json", "w"))
+    if refresh_metadata:
+        generate_metadata()
 
 
 def split_to_tokens(text):
