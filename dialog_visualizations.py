@@ -33,7 +33,8 @@ def annt_list_2_colours(annotation_list, base_colour, colours):
     if not isinstance(annotation_list, torch.Tensor):
         annotation_list = torch.Tensor(annotation_list)
 
-    normalized_tensor_list = annotation_list / torch.max(annotation_list)
+    eps = 1e-6
+    normalized_tensor_list = annotation_list / (torch.max(annotation_list) + eps)
     if colours == "nonlinear":
         negative_index = torch.where(normalized_tensor_list < 0)
         normalized_tensor_list = torch.abs(normalized_tensor_list)
@@ -126,7 +127,7 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
 
 # This variables will be set in configuration sidebar
 set_data = {
-    "current_dialogue": 4,
+    "current_dialogue": 0,
     "gt_label_colour": "#2222DD",
     "show_explanations": False,
     "show_relevance_score": False,
@@ -237,8 +238,11 @@ with (explaining):
                         # create_grounding_annt_list(example["passage"],
                         #                            example["gpt_references"],
                         #                            is_grounding)
-                show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels,
-                                   base_colour="green", annotation_scores=gpt_labels_refs)
+                    # f"##### references json for passage id: {i}\n"
+                    # example["gpt_references"]
+
+                    show_annotated_psg(passage_list, i, example["label"] == 1, gt_label_list=gt_labels,
+                                       base_colour="green", annotation_scores=gpt_labels_refs)
             else:
                 with st.container(border=True):
                     "#### GPT references not generated for this passage! \n"
