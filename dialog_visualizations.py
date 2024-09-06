@@ -1,10 +1,11 @@
+import re
+
 import numpy as np
 import streamlit as st
 import torch
 from streamlit_chat import message
 
-from utils import create_grounding_annt_list
-from visualization_data import init_model, InferenceDataProvider
+from visualization_data import init_model, InferenceDataProvider, split_to_tokens
 
 st.set_page_config(layout="wide")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -123,6 +124,75 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
                 psg_custom.append(span_text)
 
             st.html("\n".join(psg_custom))
+
+
+def find_reference_span(passage, grounding_references):
+    try:
+        before, after = passage.split(grounding_references, 1)
+    except ValueError:
+        passage = re.sub(' +', ' ', passage)
+        passage = re.sub(' ,', ',', passage)
+        before, after = passage.split(grounding_references, 1)
+    return before, after
+
+
+def create_grounding_annt_list(passage, grounding_references, label, return_failed=False):
+    if label == 0:
+        return split_to_tokens(passage), None
+    passage = passage.lower()
+
+    # Create annotation list
+    failed_references = []
+    annotation_list = []
+    broken_passage = []
+    for reference in grounding_references:
+        # strip space, because it is sometimes appended at the end and the space is not in
+        # the passage, leading to not finding part of passage containing this reference span
+        ref_span = reference["ref_span"].strip(" ").lower()
+
+        if passage == ref_span:
+            annotation_list.append(True)
+            broken_passage.append(ref_span)
+            break
+
+        try:
+            before, after = find_reference_span(passage, ref_span)
+        except ValueError:
+            failed_references.append(ref_span)
+            continue
+
+        # Found reference is not at the beginning of the passage
+        if before != "":
+            annotation_list.append(False)
+            broken_passage.append(before)  # Do not label this part of passage as GT
+
+        annotation_list.append(True)
+        broken_passage.append(ref_span)
+
+        passage = after
+        if passage == "":
+            break
+
+    # Append the remaining part of passage (if any)
+    if passage != "":
+        annotation_list.append(False)
+        broken_passage.append(passage)
+
+    unpack_passages = []
+    unpack_annt_list = []
+    for psg, annt in zip(broken_passage, annotation_list):
+        psg_tokens = split_to_tokens(psg)
+        for t in psg_tokens:
+            unpack_passages.append(t)
+            unpack_annt_list.append(annt)
+
+    # Do not return empty list but None, pass it to the function as None
+    if not unpack_passages:
+        unpack_passages = None
+
+    if return_failed:
+        return unpack_passages, unpack_annt_list, failed_references
+    return unpack_passages, unpack_annt_list
 
 
 # This variables will be set in configuration sidebar
