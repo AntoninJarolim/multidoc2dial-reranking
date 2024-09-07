@@ -1,6 +1,5 @@
 import json
 
-import nltk
 import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -9,6 +8,7 @@ import utils
 from interpretability import attention_rollout, grad_sam, att_cat
 from md2d_dataset import preprocess_examples
 from train_ce import CrossEncoder
+from utils import split_to_tokens
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
@@ -24,9 +24,6 @@ def init_model():
     cross_encoder.to(device)
     cross_encoder.eval()
     return cross_encoder, tokenizer
-
-
-cross_encoder, tokenizer = init_model()
 
 
 def get_data():
@@ -66,7 +63,7 @@ def get_current_dialog(selected_dialog):
     return diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples
 
 
-def cross_encoder_inference(rerank_dialog_examples, max_to_rerank=32):
+def cross_encoder_inference(rerank_dialog_examples, tokenizer, cross_encoder, max_to_rerank=32):
     pre_examples = preprocess_examples(rerank_dialog_examples, tokenizer, 512)
     batch = utils.transform_batch(pre_examples, max_to_rerank, device=device)
 
@@ -161,13 +158,14 @@ def generate_metadata():
 def generate_offline_data(from_id=0, to_id=200, refresh_metadata=True):
     # Code here is used to generate offline data for the visualization
     data_dialogues = get_data()
+    cross_encoder, tokenizer = init_model()
 
     for dialog_idx in tqdm(range(from_id, to_id), desc="Inferecing dialogues"):
         selected_dialogue = data_dialogues[dialog_idx]
         diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
             = get_current_dialog(selected_dialogue)
 
-        inf_out = cross_encoder_inference(rerank_dialog_examples)
+        inf_out = cross_encoder_inference(rerank_dialog_examples, tokenizer, cross_encoder)
 
         try:
             gt_rank = [i
@@ -193,10 +191,6 @@ def generate_offline_data(from_id=0, to_id=200, refresh_metadata=True):
 
     if refresh_metadata:
         generate_metadata()
-
-
-def split_to_tokens(text):
-    return tokenizer.batch_decode(tokenizer(text)["input_ids"])[1:][:-1]
 
 
 def split_to_spans(sentences):
@@ -226,11 +220,11 @@ def split_to_spans(sentences):
     return spans
 
 
-def score_to_span_scores(grad_sam_scores, spans):
+def score_to_span_scores(grad_sam_scores, spans, tokenizer):
     nr_tokens_all = 0
     new_grad_sam_scores = []
     for span in spans:
-        nr_tokens_span = len(split_to_tokens(span))
+        nr_tokens_span = len(split_to_tokens(span, tokenizer))
         if nr_tokens_span == 0:
             continue
         nr_tokens_all += nr_tokens_span
@@ -243,18 +237,6 @@ def score_to_span_scores(grad_sam_scores, spans):
         new_grad_sam_score = torch.sum(grad_sam_score_spans) / ((1 + N) * (t + k) / t)
         new_grad_sam_scores.append(torch.ones(nr_tokens_span) * new_grad_sam_score)
     return torch.cat(new_grad_sam_scores)
-
-
-def simple_span_merging(inf_out_example):
-    span_grad_sam_scores = []
-    for i, example in enumerate(inf_out_example["reranked_examples"]):
-        sentences = nltk.sent_tokenize(example["x"])
-        example["spans"] = split_to_spans(sentences)
-
-        grad_sam_scores = inf_out_example["grad_sam_scores"][i]
-        grad_sam_scores_spans = score_to_span_scores(grad_sam_scores, example["spans"])
-        span_grad_sam_scores.append(grad_sam_scores_spans)
-    return span_grad_sam_scores
 
 
 class InferenceDataProvider:
@@ -292,7 +274,10 @@ class InferenceDataProvider:
             return inf_out
         elif self.mode == "online":
             self.get_dialog_out(dialog_id)
-            return cross_encoder_inference(self.last_rerank_dialog_examples, max_to_rerank)
+            return cross_encoder_inference(self.last_rerank_dialog_examples,
+                                           max_to_rerank,
+                                           self.tokenizer,
+                                           self.cross_encoder)
 
     def get_dialog_out(self, dialog_id):
         assert self.mode in ["online", "offline"]
