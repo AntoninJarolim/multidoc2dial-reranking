@@ -1,4 +1,5 @@
 import pandas as pd
+import torch
 
 from utils import create_grounding_annt_list, split_to_tokens
 from visualization_data import InferenceDataProvider, init_model
@@ -69,6 +70,9 @@ if __name__ == "__main__":
     ]
 
     df = pd.DataFrame(get_inf_data())
+
+    df['gpt-labels-refs'] = df['gpt-labels-refs'].apply(lambda x: torch.Tensor([float(i) for i in x]))
+
     df.to_pickle("data/token_scores.pkl")
 
     print(df)
