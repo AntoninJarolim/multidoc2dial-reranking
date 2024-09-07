@@ -3,7 +3,7 @@ import streamlit as st
 import torch
 from streamlit_chat import message
 
-from utils import create_grounding_annt_list
+from utils import create_grounding_annt_list, create_highlighted_passage
 from visualization_data import init_model, InferenceDataProvider
 
 st.set_page_config(layout="wide")
@@ -26,48 +26,6 @@ def cache_init_model():
 cross_encoder, tokenizer = cache_init_model()
 
 
-def annt_list_2_colours(annotation_list, base_colour, colours):
-    if annotation_list is None:
-        return None
-
-    if not isinstance(annotation_list, torch.Tensor):
-        annotation_list = torch.Tensor(annotation_list)
-
-    eps = 1e-6
-    normalized_tensor_list = annotation_list / (torch.max(annotation_list) + eps)
-    if colours == "nonlinear":
-        negative_index = torch.where(normalized_tensor_list < 0)
-        normalized_tensor_list = torch.abs(normalized_tensor_list)
-        transf_list = -torch.log(normalized_tensor_list)
-        normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
-        normalized_tensor_list[negative_index] = -normalized_tensor_list[negative_index]
-
-    colour_range = (normalized_tensor_list * 255).type(torch.int64)
-
-    if not (-256 <= torch.min(colour_range)):
-        f"min: Conversion of {torch.min(colour_range)} to colour range failed"
-    assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
-
-    if base_colour == "blue":
-        def conv_fce(x):
-            return f'#1111{x:02x}'
-    elif base_colour == "green":
-        def conv_fce(x):
-            if x > 0:
-                return f'#11{x:02x}11'
-            else:
-                return f'#{abs(x):02x}1111'
-    elif base_colour == "red":
-        def conv_fce(x):
-            return f'#{x:02x}1111'
-    else:
-        raise ValueError(f"Base colour {base_colour} not supported")
-
-    coloured_list = [conv_fce(x) for x in colour_range]
-    return [x if x not in ["#000000", "#111100", "#11011"] else ["#00000000"]
-            for x in coloured_list]
-
-
 def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_scores=None, base_colour="blue",
                        colour_type="linear", score=None, hide_attention_colours=False, gt_label_list=None):
     """
@@ -85,44 +43,16 @@ def show_annotated_psg(passage_tokens, idx, is_grounding=False, annotation_score
             # Print psg index number in colour if grounding
             f'### :blue[{idx}]' if is_grounding else f'### {idx}'
 
-        # Create default list of colours for each token
-        colours_annotation_list = ["#00000000"] * len(passage_tokens)
-        if annotation_scores is not None and not hide_attention_colours:
-            colours_annotation_list = annt_list_2_colours(annotation_scores, base_colour, colour_type)
-
-        if gt_label_list is None:
-            gt_label_list = [None] * len(passage_tokens)
-
-        def display_colored_word(word, bg_color, fg_color):
-            # Create the HTML string with inline CSS for styling
-            return f"""
-                <span style="display: 
-                inline-flex; 
-                flex-direction: row; 
-                align-items: center; 
-                background: {bg_color}; 
-                border-radius: 0.5rem; 
-                padding: 0.25rem 0.5rem; 
-                overflow: hidden; 
-                line-height: 1; 
-                color: {fg_color};
-                ">                
-                {word}
-                </span>
-            """
-
         with passage_col:
             if score is not None:
                 f"#### {score}"
 
-            psg_custom = []
-            for bg_colour, token, gt_label in zip(colours_annotation_list, passage_tokens, gt_label_list):
-                fg_colour = "#FFFFFF" if not gt_label else "#4455FF"
-                token = token.replace('$', '\$')
-                span_text = display_colored_word(token, bg_colour, fg_colour)
-                psg_custom.append(span_text)
+            if hide_attention_colours:
+                annotation_scores = None
 
-            st.html("\n".join(psg_custom))
+            highlighted_passage = create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores,
+                                                             base_colour, colour_type)
+            st.html("\n".join(highlighted_passage))
 
 
 # This variables will be set in configuration sidebar

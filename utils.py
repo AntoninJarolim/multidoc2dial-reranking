@@ -247,3 +247,84 @@ def create_grounding_annt_list(passage, grounding_references, label, tokenizer, 
 
 def split_to_tokens(text, tokenizer):
     return tokenizer.batch_decode(tokenizer(text)["input_ids"])[1:][:-1]
+
+
+def create_highlighted_word(word, bg_color, fg_color):
+    # Create the HTML string with inline CSS for styling
+    return f"""
+        <span style="display: 
+        inline-flex; 
+        flex-direction: row; 
+        align-items: center; 
+        background: {bg_color}; 
+        border-radius: 0.5rem; 
+        padding: 0.25rem 0.5rem; 
+        overflow: hidden; 
+        line-height: 1; 
+        color: {fg_color};
+        ">                
+        {word}
+        </span>
+    """
+
+
+def create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores, base_colour, colour_type):
+    highlighted_passage = []
+
+    # Create default list of colours for each token
+    colours_annotation_list = ["#00000000"] * len(passage_tokens)
+    if annotation_scores is not None:
+        colours_annotation_list = annt_list_2_colours(annotation_scores, base_colour, colour_type)
+
+    if gt_label_list is None:
+        gt_label_list = [None] * len(passage_tokens)
+
+    for bg_colour, token, gt_label in zip(colours_annotation_list, passage_tokens, gt_label_list):
+        fg_colour = "#FFFFFF" if not gt_label else "#4455FF"
+        token = token.replace('$', '\$')
+        span_text = create_highlighted_word(token, bg_colour, fg_colour)
+        highlighted_passage.append(span_text)
+
+    return highlighted_passage
+
+
+def annt_list_2_colours(annotation_list, base_colour, colours):
+    if annotation_list is None:
+        return None
+
+    if not isinstance(annotation_list, torch.Tensor):
+        annotation_list = torch.Tensor(annotation_list)
+
+    eps = 1e-6
+    normalized_tensor_list = annotation_list / (torch.max(annotation_list) + eps)
+    if colours == "nonlinear":
+        negative_index = torch.where(normalized_tensor_list < 0)
+        normalized_tensor_list = torch.abs(normalized_tensor_list)
+        transf_list = -torch.log(normalized_tensor_list)
+        normalized_tensor_list = 1 - (transf_list / torch.max(transf_list))
+        normalized_tensor_list[negative_index] = -normalized_tensor_list[negative_index]
+
+    colour_range = (normalized_tensor_list * 255).type(torch.int64)
+
+    if not (-256 <= torch.min(colour_range)):
+        f"min: Conversion of {torch.min(colour_range)} to colour range failed"
+    assert torch.max(colour_range) < 256, f"max: Conversion of {torch.max(colour_range)} to colour range failed"
+
+    if base_colour == "blue":
+        def conv_fce(x):
+            return f'#1111{x:02x}'
+    elif base_colour == "green":
+        def conv_fce(x):
+            if x > 0:
+                return f'#11{x:02x}11'
+            else:
+                return f'#{abs(x):02x}1111'
+    elif base_colour == "red":
+        def conv_fce(x):
+            return f'#{x:02x}1111'
+    else:
+        raise ValueError(f"Base colour {base_colour} not supported")
+
+    coloured_list = [conv_fce(x) for x in colour_range]
+    return [x if x not in ["#000000", "#111100", "#11011"] else ["#00000000"]
+            for x in coloured_list]
