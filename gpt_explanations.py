@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import time
 from datetime import datetime
 
 from jsonlines import jsonlines
@@ -91,9 +92,9 @@ def messages_for_passages(turns, diag_passages, openai_api, nr_passages=16):
         psg_text = diag_passages[psg_id]["passage"]
         prompt_str = (
             "You will be presented with a dialogue in json format followed by partially relevant text. Your task is "
-            "to select spans containing answer to the last question based on entire dialogue history.  You may select "
-            "multiple spans if needed, but ensure that the selected sections do not overlap. Try to not select entire "
-            "sentences, but only fine-grained spans."
+            "to select spans containing answer to the last question based on entire dialogue history from that text. "
+            "You may select multiple spans if needed, but ensure that the selected sections do not overlap. "
+            "Try to not select entire sentences, but only fine-grained spans."
             "If there is reference (e.g. [1]) in the text, you must include it in the span."
             "Do not correct or modify the text: "
             "Include all grammatical and syntactic errors from the original text, "
@@ -103,7 +104,7 @@ def messages_for_passages(turns, diag_passages, openai_api, nr_passages=16):
             "Dialogue history:"
             f"{turns_str}\n"
             "\n"
-            "Text:"
+            "Text to select spans from:"
             f"{psg_text}"
         )
         api_message = openai_api.create_api_call_dict(prompt_str)
@@ -157,6 +158,7 @@ def create_batch_file(dialogue_id_from, dialogue_id_to):
         task_writer.write_all(tasks)
 
     print(f"Batch file saved to {jsonl_filename}")
+    return jsonl_filename
 
 
 def create_batch_job(batch_filename):
@@ -180,29 +182,31 @@ def create_batch_job(batch_filename):
 
     print(f"Created batch ({batch.id}):")
     print(batch)
+    return batch.id
 
 
 def get_output_batch(batch_id):
     client = OpenAI()
     batch = client.batches.retrieve(batch_id)
 
-    if batch.status == "completed":
-        print("Batch is completed")
+    while batch.status != "completed":
         print(batch)
-        result_file_id = batch.output_file_id
-        result = client.files.content(result_file_id).content
-        batch_filename = batch.metadata["for_filename"].replace('.jsonl', '_output.jsonl')
-        with open(batch_filename, 'wb') as file:
-            file.write(result)
-        print(f"Output file saved to {batch_filename}")
-    else:
-        print("\n\n\n")
-        print(f"All batches:")
-        for b in client.batches.list():
-            print(b, "\n\n")
-
         print(f"Batch is not completed yet - status is {batch.status}")
-        print(batch)
+        if batch.status == "failed":
+            raise Exception(f"Batch failed: {batch}")
+        sleep_with_progress(15)
+        batch = client.batches.retrieve(batch_id)
+
+    print("Batch is completed")
+    print(batch)
+    result_file_id = batch.output_file_id
+    result = client.files.content(result_file_id).content
+    batch_filename = batch.metadata["for_filename"].replace('.jsonl', '_output.jsonl')
+    with open(batch_filename, 'wb') as file:
+        file.write(result)
+    print(f"Output file saved to {batch_filename}")
+
+    return batch_filename
 
 
 def message_from_output(res):
@@ -270,6 +274,11 @@ def asdf():
     json.dump(data, open(EXAMPLE_VALIDATION_DATA, "w"), indent=4)
 
 
+def sleep_with_progress(seconds):
+    for _ in tqdm(range(seconds), desc="Waiting", unit="s"):
+        time.sleep(1)
+
+
 if __name__ == "__main__":
     argparse.ArgumentParser(description='Generate explanations for MD2D dataset')
     parser = argparse.ArgumentParser()
@@ -279,6 +288,8 @@ if __name__ == "__main__":
                         action='store_true', help='Generate explanations for a batch of samples')
     parser.add_argument("--from-sample", type=int, default=0, help="Start index of the batch")
     parser.add_argument("--to-sample", type=int, default=1, help="End index of the batch")
+    parser.add_argument("--generate-and-run", action='store_true',
+                        help="Generate batch and run OpenAI API")
 
     # Create batch job OpenAI API
     parser.add_argument("--create-batch-job",
@@ -319,6 +330,17 @@ if __name__ == "__main__":
                 print(f"Processing {out_filename}")
                 process_output(out_filename, refresh_metadata=False)
         generate_metadata()
+    elif args.generate_and_run:
+        start_indexes = range(args.from_sample, args.to_sample, 5)
+        for loop_from in start_indexes:
+            print(f"Processing {loop_from} to {loop_from + 5}")
+
+            batch_filename = create_batch_file(loop_from, loop_from + 5)
+            batch_id = create_batch_job(batch_filename)
+            out_file = get_output_batch(batch_id)
+            process_output(out_file)
+
+            sleep_with_progress(60)
 
     else:
         print("No action specified")
