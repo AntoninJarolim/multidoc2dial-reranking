@@ -42,6 +42,7 @@ def get_inf_data():
                         "gpt-labels-refs": gpt_labels_refs[:nr_tokens_trunc_passage],
                         "passage-tokens": passage_tokens[:nr_tokens_trunc_passage],
                         "diag-sep-passage": example["x"],
+                        "gpt-refs": example["gpt_references"]
                     }
 
                     passage_scoring = get_scores_passage_only(inf_out, example_id, sep_index, nr_tokens_trunc_passage)
