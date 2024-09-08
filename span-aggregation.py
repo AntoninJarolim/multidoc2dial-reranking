@@ -71,7 +71,10 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(get_inf_data())
 
-    df['gpt-labels-refs'] = df['gpt-labels-refs'].apply(lambda x: torch.Tensor([float(i) for i in x]))
+    def conv_boolean(x):
+        return 1 if x else -1
+
+    df['gpt-labels-refs'] = df['gpt-labels-refs'].apply(lambda x: torch.Tensor([float(conv_boolean(i)) for i in x]))
 
     df.to_pickle("data/token_scores.pkl")
 
