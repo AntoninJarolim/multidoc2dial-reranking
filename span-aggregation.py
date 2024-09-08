@@ -41,7 +41,7 @@ def get_inf_data():
                         "passage": example["passage"],
                         "gpt-labels-refs": gpt_labels_refs[:nr_tokens_trunc_passage],
                         "passage-tokens": passage_tokens[:nr_tokens_trunc_passage],
-                        "diag_sep_passage": example["x"],
+                        "diag-sep-passage": example["x"],
                     }
 
                     passage_scoring = get_scores_passage_only(inf_out, example_id, sep_index, nr_tokens_trunc_passage)
@@ -74,6 +74,7 @@ if __name__ == "__main__":
     def conv_boolean(x):
         return 1 if x else -1
 
+    df['gpt-labels-refs-bool'] = df['gpt-labels-refs']
     df['gpt-labels-refs'] = df['gpt-labels-refs'].apply(lambda x: torch.Tensor([float(conv_boolean(i)) for i in x]))
 
     df.to_pickle("data/token_scores.pkl")
