@@ -24,7 +24,7 @@ def get_inf_data():
         max_score_len = inf_out["reranked_rollouts"][0].size(0) - 2  # -2 for [CLS] and [EOS]
 
         for example_id, example in enumerate(inf_out["reranked_examples"]):
-            if "gpt_references" in example:
+            if "gpt_references" in example and example["gpt_references"] != []:
                 gt_label = 1  # create_grounding_annt_list expects gt_label 1, otherwise it will not return any refs
                 passage_tokens, gpt_labels_refs, failed_refs = create_grounding_annt_list(example["passage"],
                                                                                           example["gpt_references"],
