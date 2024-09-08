@@ -4,11 +4,11 @@ import torch
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-import utils
+from custom_data_utils import utils
+from custom_data_utils.utils import split_to_tokens
 from interpretability import attention_rollout, grad_sam, att_cat
 from md2d_dataset import preprocess_examples
 from train_ce import CrossEncoder
-from utils import split_to_tokens
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"

@@ -3,7 +3,7 @@ import streamlit as st
 import torch
 from streamlit_chat import message
 
-from utils import create_grounding_annt_list, create_highlighted_passage
+from custom_data_utils.utils import create_grounding_annt_list, create_highlighted_passage
 from visualization_data import init_model, InferenceDataProvider
 
 st.set_page_config(layout="wide")

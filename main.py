@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 import train_ce as tce
-from utils import compute_recall
+from custom_data_utils.utils import compute_recall
 
 logger = logging.getLogger('main')
 

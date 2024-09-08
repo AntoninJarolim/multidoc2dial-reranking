@@ -6,7 +6,7 @@ import torch
 from sentence_transformers import InputExample, CrossEncoder
 from torch.utils.data import DataLoader, Dataset
 
-from utils import pred_recall_metric, mrr_metric
+from custom_data_utils.utils import pred_recall_metric, mrr_metric
 
 logging.basicConfig(level=logging.INFO)
 

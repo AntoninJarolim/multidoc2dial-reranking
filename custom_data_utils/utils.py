@@ -125,7 +125,7 @@ def calc_physical_batch_size(batch_size, gpu_batches=None):
 
     # Get the host name
     host_name = socket.gethostname()
-    hosts_gpu_file = ".host_config.json"  # Json dict with host name as key and gpu name as value
+    hosts_gpu_file = "../.host_config.json"  # Json dict with host name as key and gpu name as value
     gpu_hosts = json.load(open(hosts_gpu_file))
     assert host_name in gpu_hosts, f"Host {host_name} not found in {hosts_gpu_file} file"
 

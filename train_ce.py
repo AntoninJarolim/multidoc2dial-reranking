@@ -13,9 +13,10 @@ from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, BertForSequenceClassification, DebertaV2Model, BertModel
 from transformers import DebertaV2ForSequenceClassification
 
-from md2d_dataset import MD2DDataset
-from utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, load_model, save_model, \
+from custom_data_utils.utils import mrr_metric, transform_batch, pred_recall_metric, calc_physical_batch_size, \
+    load_model, save_model, \
     save_best_model
+from md2d_dataset import MD2DDataset
 
 logger = logging.getLogger('main')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -437,7 +438,7 @@ def training_loop(cross_encoder,
 
     DEBUG = False
     if DEBUG:
-        from utils import LimitedDataLoader
+        from custom_data_utils.utils import LimitedDataLoader
         test_loader = LimitedDataLoader(test_loader, 20)
         train_loader = LimitedDataLoader(train_loader, 500)
 

@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 
-from utils import create_grounding_annt_list, split_to_tokens
+from custom_data_utils.utils import create_grounding_annt_list, split_to_tokens
 from visualization_data import InferenceDataProvider, init_model
 
 
