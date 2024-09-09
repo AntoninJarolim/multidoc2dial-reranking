@@ -55,11 +55,11 @@ def get_inf_data():
 
                     record = {
                         "passage": example["passage"],
-                        "gpt_labels_refs": gpt_labels_refs[:nr_tokens_trunc_passage],
+                        "gpt_labels_refs_bool": gpt_labels_refs[:nr_tokens_trunc_passage],
                         "passage_tokens": passage_tokens[:nr_tokens_trunc_passage],
                         "diag_sep_passage": example["x"],
                         "gpt_refs": example["gpt_references"],
-                        "gt_labels_refs": gt_labels_refs
+                        "gt_labels_refs_bool": gt_labels_refs[:nr_tokens_trunc_passage]
                     }
 
                     passage_scoring = get_scores_passage_only(inf_out, example_id, sep_index, nr_tokens_trunc_passage)
@@ -90,12 +90,12 @@ if __name__ == "__main__":
     df = pd.DataFrame(get_inf_data())
 
 
-    def conv_boolean(x):
-        return 1 if x else -1
+    def conv_boolean_arr(x):
+        return torch.Tensor([float(1 if i else -1) for i in x])
 
 
-    df['gpt_labels_refs_bool'] = df['gpt_labels_refs']
-    df['gpt_labels_refs'] = df['gpt_labels_refs'].apply(lambda x: torch.Tensor([float(conv_boolean(i)) for i in x]))
+    df['gpt_labels_refs'] = df['gpt_labels_refs_bool'].apply(lambda x: conv_boolean_arr(x))
+    df['gpt_labels_refs'] = df['gt_labels_refs_bool'].apply(lambda x: conv_boolean_arr(x))
 
     df.to_pickle("data/token_scores.pkl")
 
