@@ -16,9 +16,23 @@ def get_scores_passage_only(inf_out_all_passages, passage_id, sep_index, nr_toke
     return scores
 
 
+def try_get_gt_labels(example, gt_label, grounded_agent_utterance):
+    gt_labels_refs = None
+    if example["label"]:
+        _, gt_labels_refs = create_grounding_annt_list(example["passage"],
+                                                       grounded_agent_utterance["references"],
+                                                       gt_label,
+                                                       tokenizer)
+    return gt_labels_refs
+
+
 def get_inf_data():
     df_data = []
     for diag_id in annotated_ids:
+
+        # Needed to calculate vector of booleans saying which one is relevant
+        _, grounded_agent_utterance, _, _ \
+            = data_provider.get_dialog_out(diag_id)
 
         inf_out = data_provider.get_dialog_inference_out(diag_id, nr_annotated_passages)
         max_score_len = inf_out["reranked_rollouts"][0].size(0) - 2  # -2 for [CLS] and [EOS]
@@ -31,6 +45,8 @@ def get_inf_data():
                                                                                           gt_label,
                                                                                           tokenizer,
                                                                                           return_failed=True)
+                gt_labels_refs = try_get_gt_labels(example, gt_label, grounded_agent_utterance)
+
                 if not failed_refs:
                     tokens = split_to_tokens(example["x"], tokenizer)[:max_score_len]
 
@@ -39,19 +55,20 @@ def get_inf_data():
 
                     record = {
                         "passage": example["passage"],
-                        "gpt-labels-refs": gpt_labels_refs[:nr_tokens_trunc_passage],
-                        "passage-tokens": passage_tokens[:nr_tokens_trunc_passage],
-                        "diag-sep-passage": example["x"],
-                        "gpt-refs": example["gpt_references"]
+                        "gpt_labels_refs": gpt_labels_refs[:nr_tokens_trunc_passage],
+                        "passage_tokens": passage_tokens[:nr_tokens_trunc_passage],
+                        "diag_sep_passage": example["x"],
+                        "gpt_refs": example["gpt_references"],
+                        "gt_labels_refs": gt_labels_refs
                     }
 
                     passage_scoring = get_scores_passage_only(inf_out, example_id, sep_index, nr_tokens_trunc_passage)
                     record.update(passage_scoring)
 
                     for label in score_labels:
-                        if not (len(record["gpt-labels-refs"]) == len(record[label])):
+                        if not (len(record["gpt_labels_refs"]) == len(record[label])):
                             raise AssertionError(
-                                f"Length mismatch: {len(record['gpt-labels-refs'])} vs {len(record['grad-sam-refs'])}")
+                                f"Length mismatch: {len(record['gpt_labels_refs'])} vs {len(record['grad_sam_refs'])}")
 
                     df_data.append(record)
     return df_data
@@ -72,11 +89,13 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(get_inf_data())
 
+
     def conv_boolean(x):
         return 1 if x else -1
 
-    df['gpt-labels-refs-bool'] = df['gpt-labels-refs']
-    df['gpt-labels-refs'] = df['gpt-labels-refs'].apply(lambda x: torch.Tensor([float(conv_boolean(i)) for i in x]))
+
+    df['gpt_labels_refs_bool'] = df['gpt_labels_refs']
+    df['gpt_labels_refs'] = df['gpt_labels_refs'].apply(lambda x: torch.Tensor([float(conv_boolean(i)) for i in x]))
 
     df.to_pickle("data/token_scores.pkl")
 
