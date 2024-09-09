@@ -45,7 +45,6 @@ def get_inf_data():
                                                                                           gt_label,
                                                                                           tokenizer,
                                                                                           return_failed=True)
-                gt_labels_refs = try_get_gt_labels(example, gt_label, grounded_agent_utterance)
 
                 if not failed_refs:
                     tokens = split_to_tokens(example["x"], tokenizer)[:max_score_len]
@@ -53,22 +52,27 @@ def get_inf_data():
                     sep_index = [i for i, x in enumerate(tokens) if x == "[SEP]"][0]
                     nr_tokens_trunc_passage = len(tokens[sep_index + 1:])
 
+                    gt_labels_refs = try_get_gt_labels(example, gt_label, grounded_agent_utterance)
+                    if gt_labels_refs is not None:
+                        gt_labels_refs = gt_labels_refs[:nr_tokens_trunc_passage]
+
                     record = {
                         "passage": example["passage"],
                         "gpt_labels_refs_bool": gpt_labels_refs[:nr_tokens_trunc_passage],
                         "passage_tokens": passage_tokens[:nr_tokens_trunc_passage],
                         "diag_sep_passage": example["x"],
                         "gpt_refs": example["gpt_references"],
-                        "gt_labels_refs_bool": gt_labels_refs[:nr_tokens_trunc_passage]
+                        "gt_labels_refs_bool": gt_labels_refs
                     }
 
                     passage_scoring = get_scores_passage_only(inf_out, example_id, sep_index, nr_tokens_trunc_passage)
                     record.update(passage_scoring)
 
                     for label in score_labels:
-                        if not (len(record["gpt_labels_refs"]) == len(record[label])):
+                        if not (len(record["gpt_labels_refs_bool"]) == len(record[label])):
                             raise AssertionError(
-                                f"Length mismatch: {len(record['gpt_labels_refs'])} vs {len(record['grad_sam_refs'])}")
+                                f"Length mismatch: "
+                                f"{len(record['gpt_labels_refs_bool'])} vs {len(record['grad_sam_refs'])}")
 
                     df_data.append(record)
     return df_data
@@ -91,11 +95,13 @@ if __name__ == "__main__":
 
 
     def conv_boolean_arr(x):
+        if x is None:
+            return None
         return torch.Tensor([float(1 if i else -1) for i in x])
 
 
     df['gpt_labels_refs'] = df['gpt_labels_refs_bool'].apply(lambda x: conv_boolean_arr(x))
-    df['gpt_labels_refs'] = df['gt_labels_refs_bool'].apply(lambda x: conv_boolean_arr(x))
+    df['gt_labels_refs'] = df['gt_labels_refs_bool'].apply(lambda x: conv_boolean_arr(x))
 
     df.to_pickle("data/token_scores.pkl")
 
