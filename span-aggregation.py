@@ -5,13 +5,22 @@ from custom_data_utils.utils import create_grounding_annt_list, split_to_tokens
 from visualization_data import InferenceDataProvider, init_model
 
 
+def get_att_mean_scores(batch_attention_scores):
+    return {
+        'mean_att_all': [scores.mean(dim=(0, 1)) for scores in batch_attention_scores],
+        'mean_att_last_layer': [scores[-1].mean(dim=0) for scores in batch_attention_scores]
+    }
+
+
 def get_scores_passage_only(inf_out_all_passages, passage_id, sep_index, nr_tokens_trunc_passage):
-    def get_one_score(score_list):
+    scores = {}
+
+    def get_one_score(score_list, sep_index, nr_tokens_trunc_passage):
         return score_list[1:][:-1][sep_index + 1:][:nr_tokens_trunc_passage]
 
-    scores = {}
     for label in score_labels:
-        scores[label] = get_one_score(inf_out_all_passages[label][passage_id])
+        scoring = inf_out_all_passages[label][passage_id]
+        scores[label] = get_one_score(scoring, sep_index, nr_tokens_trunc_passage)
 
     return scores
 
@@ -36,6 +45,9 @@ def get_inf_data():
 
         inf_out = data_provider.get_dialog_inference_out(diag_id, nr_annotated_passages)
         max_score_len = inf_out["reranked_rollouts"][0].size(0) - 2  # -2 for [CLS] and [EOS]
+
+        att_scores = get_att_mean_scores(inf_out['att_weights_cls'])
+        inf_out.update(att_scores)
 
         for example_id, example in enumerate(inf_out["reranked_examples"]):
             if "gpt_references" in example and example["gpt_references"] != []:
@@ -89,6 +101,8 @@ if __name__ == "__main__":
         'reranked_rollouts',
         'grad_sam_scores',
         'att_cat_scores',
+        'mean_att_all',
+        'mean_att_last_layer',
     ]
 
     df = pd.DataFrame(get_inf_data())
