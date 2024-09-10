@@ -106,6 +106,7 @@ if __name__ == "__main__":
     ]
 
     df = pd.DataFrame(get_inf_data())
+    df = df.rename(columns={"reranked_rollouts": "att_rollout"})
 
 
     def conv_boolean_arr(x):
