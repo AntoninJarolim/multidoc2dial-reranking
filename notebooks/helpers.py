@@ -4,7 +4,6 @@ import torch
 from custom_data_utils import utils
 from IPython.display import display, HTML
 
-
 def get_df():
     # Read the data
     df = pd.read_pickle("../data/token_scores.pkl")
@@ -61,7 +60,7 @@ def sanity_check(score_label, threshold, gt_label, running_f1, gt_record_index=2
     show_highlighted_passage(record, record[gt_label_bool], record["running_threshold"])
 
 def compute_running_thresholds(df_apply, score_label, top_k_tokens, gt_label):
-    df_apply["running_threshold"] = df_apply[score_label].apply(lambda x: threshold_prob(x, top_k_tokens))
+    df_apply["running_threshold"] = df_apply[score_label].apply(lambda x: threshold_score(x, top_k_tokens))
     running_f1 = df_apply.apply(lambda x: calc_f1_score(x["running_threshold"], x[gt_label]), axis=1)
     return running_f1
 
