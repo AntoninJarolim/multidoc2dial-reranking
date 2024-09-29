@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from collections import defaultdict
 from datetime import datetime
 from os.path import join, dirname
 
@@ -23,11 +24,11 @@ dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 DEBUG = os.environ.get("DEBUG", False)
+DEBUG = True if DEBUG == "True" else False
 load_time = datetime.now()
 
 
 def get_remote_ip() -> str:
-    """Get remote ip."""
     try:
         ctx = get_script_run_ctx()
         if ctx is None:
@@ -83,8 +84,28 @@ def add_justify_end_to_parent(widget_label):
     components.html(f"{htmlstr}")
 
 
+def read_done_dialogues():
+    done_dialogues = defaultdict(int)
+    if os.path.exists("user-preferences.jsonl"):
+        with open("user-preferences.jsonl", "r") as f:
+            for line in f:
+                data = json.loads(line)
+                done_dialogues[data["dialogue_id"]] += 1
+    return done_dialogues
+
+
+def ids_with_highest_annotations():
+    freq_dict = read_done_dialogues()
+    if len(freq_dict) == 0:
+        return []
+    max_value = max(freq_dict.values())
+    return [k for k, v in freq_dict.items() if v == max_value]
+
+
 def new_random_dialogue(set_data):
-    set_data["current_dialogue"] = np.random.choice(set_data["dialogues_to_ann"])
+    all_choices = set(set_data["dialogues_to_ann"])
+    choices = set(ids_with_highest_annotations())
+    set_data["current_dialogue"] = np.random.choice(list(all_choices - choices))
 
 
 def show_annotated_psg(passage_tokens, annotation_scores=None, base_colour="blue",
@@ -107,11 +128,6 @@ def show_annotated_psg(passage_tokens, annotation_scores=None, base_colour="blue
 
 
 def example_preferred(preference):
-    """
-    saves as json-lines to /user-preferences folder
-    :param preference:
-    :return:
-    """
     if os.environ.get("DEBUG", False):
         print(f"Preference: {preference}")
 
@@ -124,6 +140,7 @@ def example_preferred(preference):
             "ip": get_remote_ip()
         }
         out_data = json.dumps(out_obj)
+        print(out_data)
         f.write(f"{out_data}\n")
 
 
@@ -139,7 +156,9 @@ def filter_grounded_passage_has_gpt_refs():
         gt_psg = get_gt_passage(all_examples)
         if "gpt_references" in gt_psg:
             has_ids.append(dialogue_id)
-    return has_ids
+
+    excluded_ids = [36]
+    return [dialogue_id for dialogue_id in has_ids if dialogue_id not in excluded_ids]
 
 
 # Start of streamlit page execution
@@ -157,32 +176,47 @@ set_data = {
     "dialogues_to_ann": filter_grounded_passage_has_gpt_refs()[:30]
 }
 
+# Initialize session state
+if 'next_dialogue_id' not in st.session_state:
+    st.session_state.next_dialogue_id = None
+
 if set_data["current_dialogue"] is None:
-    new_random_dialogue(set_data)
+    if st.session_state.next_dialogue_id:
+        # Reset the dialogue if the admin has manually changed it
+        set_data["current_dialogue"] = st.session_state.next_dialogue_id
+        st.session_state.next_dialogue_id = None
+    else:
+        new_random_dialogue(set_data)
 
 diag_turns, grounded_agent_utterance, nr_show_utterances, rerank_dialog_examples \
     = cache_dialog_inference_out(set_data["current_dialogue"])
+
+
+def skip_dialogue():
+    current_id = [i for i, diag_íd in enumerate(set_data["dialogues_to_ann"])
+                  if diag_íd == set_data["current_dialogue"]][0]
+    next_id = current_id + 1
+    if next_id >= len(set_data["dialogues_to_ann"]):
+        next_id = 0
+    st.session_state.next_dialogue_id = set_data["dialogues_to_ann"][next_id]
+
 
 if DEBUG:
     with st.sidebar:
         st.write("Debug mode")
         st.write("Current dialogue:", set_data["current_dialogue"])
         "diags to annotate", set_data["dialogues_to_ann"]
-        st.button("Next dialogue", on_click=new_random_dialogue, args=(set_data,))
+        st.button("Next dialogue", on_click=skip_dialogue)
+        "digs with highest annotations", ids_with_highest_annotations()
 
 chat, _, option1, option2 = st.columns([7, 1, 6, 6])
 # Left side of the page
 with chat:
-    for utterance in diag_turns[:nr_show_utterances]:
+    for utterance in diag_turns[:nr_show_utterances - 1]:
         is_user = True if utterance["role"] == "user" else False
         message(f"{utterance['utterance']}", is_user=is_user)
 
     st.chat_input("Say something")
-
-
-def skip_dialogue():
-    set_data["current_dialogue"] += 1
-
 
 show_gt_examples = rerank_dialog_examples
 show_gt_example = get_gt_passage(show_gt_examples)

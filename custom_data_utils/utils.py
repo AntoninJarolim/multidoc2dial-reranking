@@ -258,7 +258,7 @@ def create_highlighted_word(word, bg_color, fg_color):
         align-items: center; 
         background: {bg_color}; 
         border-radius: 0.5rem; 
-        padding: 0.25rem 0.5rem; 
+        padding: 0.07rem 0.15rem; 
         overflow: hidden; 
         line-height: 1; 
         color: {fg_color};
