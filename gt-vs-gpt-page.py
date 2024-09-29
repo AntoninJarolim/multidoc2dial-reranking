@@ -1,4 +1,6 @@
+import json
 import os
+import random
 from os.path import join, dirname
 
 import numpy as np
@@ -13,7 +15,6 @@ from visualization_data import init_model, InferenceDataProvider
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking_gpt.json"
 
 st.set_page_config(layout="wide")
-chat, _, option1, option2 = st.columns([7, 1, 6, 6])
 
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
@@ -31,7 +32,7 @@ def cache_dialog_inference_out(dialog_id):
     return data_provider.get_dialog_out(dialog_id)
 
 
-def change_button_colour(widget_label, font_color, background_color='transparent'):
+def change_button_colour(widget_label, font_color='', background_color='transparent'):
     htmlstr = f"""
         <script>
             var elements = window.parent.document.querySelectorAll('button');
@@ -85,8 +86,22 @@ def show_annotated_psg(passage_tokens, annotation_scores=None, base_colour="blue
     st.html("\n".join(highlighted_passage))
 
 
-def example_preferred():
-    pass
+def example_preferred(preference):
+    """
+    saves as json-lines to /user-preferences folder
+    :param preference:
+    :return:
+    """
+    if os.environ.get("DEBUG", False):
+        print(f"Preference: {preference}")
+
+    with open(f"user-preferences.jsonl", "a") as f:
+        out_obj = {
+            "dialogue_id": set_data["current_dialogue"],
+            "preference": preference,
+        }
+        out_data = json.dumps(out_obj)
+        f.write(f"{out_data}\n")
 
 
 def get_gt_passage(examples):
@@ -132,6 +147,7 @@ if DEBUG:
         "diags to annotate", set_data["dialogues_to_ann"]
         st.button("Next dialogue", on_click=new_random_dialogue, args=(set_data,))
 
+chat, _, option1, option2 = st.columns([7, 1, 6, 6])
 # Left side of the page
 with chat:
     for utterance in diag_turns[:nr_show_utterances]:
@@ -148,25 +164,38 @@ def skip_dialogue():
 show_gt_examples = rerank_dialog_examples
 show_gt_example = get_gt_passage(show_gt_examples)
 
+A_passage, A_labels = create_grounding_annt_list(show_gt_example["passage"],
+                                                 grounded_agent_utterance["references"],
+                                                 show_gt_example["label"],
+                                                 tokenizer)
+
+B_passage, B_labels = create_grounding_annt_list(show_gt_example["passage"],
+                                                 show_gt_example["gpt_references"],
+                                                 show_gt_example["label"],
+                                                 tokenizer)
+
+left_label = "GT"
+right_label = "GPT"
+if random.random() < 0.5:
+    A_passage, B_passage = B_passage, A_passage
+    A_labels, B_labels = B_labels, A_labels
+    left_label, right_label = right_label, left_label
+
 with option1:
     with st.container(border=True):
         "### :red[Option A]"
-        passage_list, gt_labels = create_grounding_annt_list(show_gt_example["passage"],
-                                                             grounded_agent_utterance["references"],
-                                                             show_gt_example["label"],
-                                                             tokenizer)
-        show_annotated_psg(passage_list, gt_label_list=gt_labels)
+        if DEBUG:
+            f"### {left_label}"
+        show_annotated_psg(A_passage, gt_label_list=A_labels)
 
     neither_col, A_mid_col, A_col = st.columns([50, 50, 50])
 
 with option2:
     with st.container(border=True):
         "### :green[Option B]"
-        passage_list, gt_labels = create_grounding_annt_list(show_gt_example["passage"],
-                                                             show_gt_example["gpt_references"],
-                                                             show_gt_example["label"],
-                                                             tokenizer)
-        show_annotated_psg(passage_list, gt_label_list=gt_labels)
+        if DEBUG:
+            f"### {right_label}"
+        show_annotated_psg(B_passage, gt_label_list=B_labels)
 
     B_col, B_mid_col, both_col = st.columns([50, 50, 50])
 
@@ -175,25 +204,25 @@ with neither_col:
     st.button("Neither is good", on_click=example_preferred, args=("None",))
 
 with A_mid_col:
-    st.button("A slightly better", on_click=example_preferred, args=("A",))
+    st.button("A slightly better", on_click=example_preferred, args=(left_label + "-slightly",))
 
 with A_col:
-    st.button("A better", on_click=example_preferred, args=("A",))
+    st.button("A better", on_click=example_preferred, args=(left_label,))
 
 with B_col:
-    st.button('B better', on_click=example_preferred, args=("B",))
+    st.button('B better', on_click=example_preferred, args=(right_label,))
 
 with B_mid_col:
-    st.button('B slightly better', on_click=example_preferred, args=("B",))
+    st.button('B slightly better', on_click=example_preferred, args=(right_label + "-slightly",))
 
 with both_col:
     st.button("Both are perfect", on_click=example_preferred, args=("Both",))
 
-change_button_colour('A better', '', '#e51f1f')
-change_button_colour('B better', '', '#70e000')
+change_button_colour('A better', background_color='#e51f1f')
+change_button_colour('B better', background_color='#70e000')
 
-change_button_colour('A slightly better', '', '#e51f1f99')
-change_button_colour('B slightly better', '', '#70e00099')
+change_button_colour('A slightly better', background_color='#e51f1f99')
+change_button_colour('B slightly better', background_color='#70e00099')
 
 add_justify_end_to_parent('A better')
 add_justify_end_to_parent('Both are perfect')
