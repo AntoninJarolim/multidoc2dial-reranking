@@ -125,7 +125,7 @@ def cache_cross_encoder_inference(dialog_id, nr_passages):
 
 
 # RIGHT SECTION EXPLAINING features
-with (explaining):
+with explaining:
     "### Reranked results and attention visualizations"
     gt_tab, gpt_tab, raw_att_tab, att_rollout_tab, grad_sam_tab, att_cat_tab = st.tabs(
         ["Ground Truth",
