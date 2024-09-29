@@ -8,6 +8,8 @@ import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
+from streamlit import runtime
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 from streamlit_chat import message
 
 from custom_data_utils.utils import create_grounding_annt_list, create_highlighted_passage
@@ -22,6 +24,22 @@ load_dotenv(dotenv_path)
 
 DEBUG = os.environ.get("DEBUG", False)
 load_time = datetime.now()
+
+
+def get_remote_ip() -> str:
+    """Get remote ip."""
+    try:
+        ctx = get_script_run_ctx()
+        if ctx is None:
+            return ""
+
+        session_info = runtime.get_instance().get_client(ctx.session_id)
+        if session_info is None:
+            return ""
+    except:
+        return ""
+
+    return session_info.request.remote_ip
 
 
 @st.cache_resource
@@ -102,7 +120,8 @@ def example_preferred(preference):
             "dialogue_id": str(set_data["current_dialogue"]),
             "preference": preference,
             "time": str(datetime.now()),
-            "took_seconds": (datetime.now() - load_time).total_seconds()
+            "took_seconds": (datetime.now() - load_time).total_seconds(),
+            "ip": get_remote_ip()
         }
         out_data = json.dumps(out_obj)
         f.write(f"{out_data}\n")
