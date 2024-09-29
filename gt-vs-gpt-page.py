@@ -140,7 +140,7 @@ def example_preferred(preference):
             "ip": get_remote_ip()
         }
         out_data = json.dumps(out_obj)
-        print(out_data)
+
         f.write(f"{out_data}\n")
 
 
