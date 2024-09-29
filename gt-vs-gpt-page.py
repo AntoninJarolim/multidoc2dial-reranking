@@ -45,7 +45,7 @@ def get_remote_ip() -> str:
 
 @st.cache_resource
 def cache_init_model():
-    return init_model()
+    return init_model(tokenizer_only=True)
 
 
 @st.cache_data
@@ -162,8 +162,8 @@ def filter_grounded_passage_has_gpt_refs():
 
 
 # Start of streamlit page execution
-cross_encoder, tokenizer = cache_init_model()
-data_provider = InferenceDataProvider(cross_encoder, tokenizer)
+tokenizer = cache_init_model()
+data_provider = InferenceDataProvider()
 
 # get available dialogues
 

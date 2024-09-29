@@ -15,8 +15,10 @@ EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking.json"
 model_name = "naver/trecdl22-crossencoder-debertav3"
 
 
-def init_model():
+def init_model(tokenizer_only=False):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer_only:
+        return tokenizer
     cross_encoder = CrossEncoder(model_name)
     cross_encoder.save_attention_weights = True
     cross_encoder.bert_model.config.output_attentions = True
@@ -240,7 +242,7 @@ def score_to_span_scores(grad_sam_scores, spans, tokenizer):
 
 
 class InferenceDataProvider:
-    def __init__(self, cross_encoder, tokenizer):
+    def __init__(self, cross_encoder=None, tokenizer=None):
         self.cross_encoder = cross_encoder
         self.tokenizer = tokenizer
         self.meta_data = json.load(open("data/examples/inference/diag_examples_inference_out.json"))
@@ -273,6 +275,7 @@ class InferenceDataProvider:
 
             return inf_out
         elif self.mode == "online":
+            assert self.cross_encoder is not None
             self.get_dialog_out(dialog_id)
             return cross_encoder_inference(self.last_rerank_dialog_examples,
                                            max_to_rerank,
