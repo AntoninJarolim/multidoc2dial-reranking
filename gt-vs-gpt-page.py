@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from datetime import datetime
 from os.path import join, dirname
 
 import numpy as np
@@ -20,6 +21,7 @@ dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 DEBUG = os.environ.get("DEBUG", False)
+load_time = datetime.now()
 
 
 @st.cache_resource
@@ -97,8 +99,10 @@ def example_preferred(preference):
 
     with open(f"user-preferences.jsonl", "a") as f:
         out_obj = {
-            "dialogue_id": set_data["current_dialogue"],
+            "dialogue_id": str(set_data["current_dialogue"]),
             "preference": preference,
+            "time": str(datetime.now()),
+            "took_seconds": (datetime.now() - load_time).total_seconds()
         }
         out_data = json.dumps(out_obj)
         f.write(f"{out_data}\n")
