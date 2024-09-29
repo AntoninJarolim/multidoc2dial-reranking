@@ -86,8 +86,8 @@ def add_justify_end_to_parent(widget_label):
 
 def read_done_dialogues():
     done_dialogues = defaultdict(int)
-    if os.path.exists("user-preferences.jsonl"):
-        with open("user-preferences.jsonl", "r") as f:
+    if os.path.exists("user-choices/user-preferences.jsonl"):
+        with open("user-choices/user-preferences.jsonl", "r") as f:
             for line in f:
                 data = json.loads(line)
                 done_dialogues[data["dialogue_id"]] += 1
@@ -131,7 +131,10 @@ def example_preferred(preference):
     if os.environ.get("DEBUG", False):
         print(f"Preference: {preference}")
 
-    with open(f"user-preferences.jsonl", "a") as f:
+    if not os.path.exists("user-choices"):
+        os.makedirs("user-choices")
+
+    with open(f"user-choices/user-preferences.jsonl", "a") as f:
         out_obj = {
             "dialogue_id": str(set_data["current_dialogue"]),
             "preference": preference,
@@ -140,7 +143,7 @@ def example_preferred(preference):
             "ip": get_remote_ip()
         }
         out_data = json.dumps(out_obj)
-
+        print(out_data)
         f.write(f"{out_data}\n")
 
 
