@@ -18,7 +18,10 @@ from visualization_data import init_model, InferenceDataProvider
 
 EXAMPLE_VALIDATION_DATA = "data/examples/200_dialogues_reranking_gpt.json"
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    layout="wide",
+    page_title="A/B Testing",
+)
 
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
