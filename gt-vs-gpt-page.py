@@ -144,7 +144,8 @@ def example_preferred(preference):
             "preference": preference,
             "time": str(datetime.now()),
             "took_seconds": (datetime.now() - load_time).total_seconds(),
-            "ip": get_remote_ip()
+            "ip": get_remote_ip(),
+            "header": dict(st.context.headers),
         }
         out_data = json.dumps(out_obj)
         print(out_data)
