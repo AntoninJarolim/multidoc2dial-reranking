@@ -126,7 +126,8 @@ def show_annotated_psg(passage_tokens, annotation_scores=None, base_colour="blue
         annotation_scores = None
 
     highlighted_passage = create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores,
-                                                     base_colour, colour_type)
+                                                     base_colour, colour_type,
+                                                     gt_label_colour=set_data["gt_label_colour"])
     st.html("\n".join(highlighted_passage))
 
 
@@ -178,7 +179,7 @@ data_provider = InferenceDataProvider()
 # Setting which data to show
 set_data = {
     "current_dialogue": None,
-    "gt_label_colour": "#2222DD",
+    "gt_label_colour": "#22DD22",
     "dialogues_to_ann": filter_grounded_passage_has_gpt_refs()[:30]
 }
 
@@ -255,7 +256,7 @@ with option1:
 
 with option2:
     with st.container(border=True):
-        "### :green[Option B]"
+        "### :blue[Option B]"
         if DEBUG:
             f"### {right_label}"
         show_annotated_psg(B_passage, gt_label_list=B_labels)
@@ -282,10 +283,10 @@ with both_col:
     st.button("Both are perfect", on_click=example_preferred, args=("Both",))
 
 change_button_colour('A better', background_color='#e51f1f')
-change_button_colour('B better', background_color='#70e000')
+change_button_colour('B better', background_color='#0070e0')
 
 change_button_colour('A slightly better', background_color='#e51f1f99')
-change_button_colour('B slightly better', background_color='#70e00099')
+change_button_colour('B slightly better', background_color='#0070e099')
 
 add_justify_end_to_parent('A better')
 add_justify_end_to_parent('Both are perfect')

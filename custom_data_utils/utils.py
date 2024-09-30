@@ -268,8 +268,10 @@ def create_highlighted_word(word, bg_color, fg_color):
     """
 
 
-def create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores, base_colour, colour_type):
+def create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores,
+                               base_colour, colour_type, gt_label_colour=None):
     highlighted_passage = []
+    gt_label_colour = gt_label_colour if gt_label_colour is not None else "#44FF55"
 
     # Create default list of colours for each token
     colours_annotation_list = ["#00000000"] * len(passage_tokens)
@@ -280,7 +282,7 @@ def create_highlighted_passage(passage_tokens, gt_label_list, annotation_scores,
         gt_label_list = [None] * len(passage_tokens)
 
     for bg_colour, token, gt_label in zip(colours_annotation_list, passage_tokens, gt_label_list):
-        fg_colour = "#FFFFFF" if not gt_label else "#4455FF"
+        fg_colour = "#FFFFFF" if not gt_label else gt_label_colour
         token = token.replace('$', '\$')
         span_text = create_highlighted_word(token, bg_colour, fg_colour)
         highlighted_passage.append(span_text)
