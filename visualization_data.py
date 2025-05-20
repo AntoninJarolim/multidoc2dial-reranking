@@ -18,7 +18,7 @@ model_name = "naver/trecdl22-crossencoder-debertav3"
 def init_model(tokenizer_only=False):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer_only:
-        return tokenizer
+        return None, tokenizer
     cross_encoder = CrossEncoder(model_name)
     cross_encoder.save_attention_weights = True
     cross_encoder.bert_model.config.output_attentions = True

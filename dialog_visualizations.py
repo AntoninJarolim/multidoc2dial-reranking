@@ -20,7 +20,7 @@ model_name = "naver/trecdl22-crossencoder-debertav3"
 
 @st.cache_resource
 def cache_init_model():
-    return init_model()
+    return init_model(tokenizer_only=True)
 
 
 cross_encoder, tokenizer = cache_init_model()
